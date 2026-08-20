@@ -193,7 +193,7 @@
              class="hidden mt-4 rounded-2xl border border-amber-200 bg-amber-50/60 overflow-hidden fade-up">
           <div class="px-4 py-3 border-b border-amber-100 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p class="text-sm font-semibold text-slate-800">ตรวจคำภาษาไทย</p>
+              <p class="text-sm font-semibold text-slate-800">คำที่ควรตรวจสอบ</p>
               <p id="spellCheckSummary" class="text-xs text-slate-500 mt-0.5"></p>
             </div>
             <button type="button" onclick="closeSpellCheck()"
@@ -349,6 +349,24 @@
         <div class="p-5 md:p-6">
           <div id="pointsResult"
                class="ai-result text-slate-700 leading-8 text-[15px]"></div>
+
+          <div class="mt-5 pt-4 border-t border-slate-100 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onclick="copyWebsiteCode('collapse')"
+              class="text-xs md:text-sm text-slate-600 hover:text-blue-700 bg-white border border-slate-200 hover:border-blue-300 px-3 py-2 rounded-xl shadow-sm transition"
+            >
+              <span id="copyWebsiteCollapseText">คัดลอกโค้ดแบบซ่อน</span>
+            </button>
+
+            <button
+              type="button"
+              onclick="copyWebsiteCode('normal')"
+              class="text-xs md:text-sm text-slate-600 hover:text-emerald-700 bg-white border border-slate-200 hover:border-emerald-300 px-3 py-2 rounded-xl shadow-sm transition"
+            >
+              <span id="copyWebsiteNormalText">คัดลอกโค้ดแบบไม่ซ่อน</span>
+            </button>
+          </div>
         </div>
       </article>
 
@@ -643,10 +661,30 @@
       return;
     }
 
-    summary.innerText =
-      `พบ ${currentSpellIssues.length.toLocaleString("th-TH")} จุดที่ควรตรวจสอบ`;
+    // Group same wrong→correct pairs so the user sees a clean list of wrong words.
+    const grouped = new Map();
 
-    currentSpellIssues.forEach((issue, idx) => {
+    currentSpellIssues.forEach(issue => {
+      const key = `${issue.wrong}|${issue.correct}`;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          wrong: issue.wrong,
+          correct: issue.correct,
+          type: issue.type,
+          count: 0
+        });
+      }
+
+      grouped.get(key).count += 1;
+    });
+
+    const groups = Array.from(grouped.values());
+
+    summary.innerText =
+      `พบคำที่ควรตรวจสอบ ${groups.length.toLocaleString("th-TH")} คำ`;
+
+    groups.forEach(group => {
       const row = document.createElement("div");
       row.className =
         "px-4 py-3.5 bg-white/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3";
@@ -660,7 +698,7 @@
       const wrong = document.createElement("span");
       wrong.className =
         "rounded-lg bg-red-50 border border-red-100 px-2 py-1 text-sm font-medium text-red-700";
-      wrong.textContent = issue.wrong;
+      wrong.textContent = group.wrong;
 
       const arrow = document.createElement("span");
       arrow.className = "text-slate-300";
@@ -669,16 +707,24 @@
       const correct = document.createElement("span");
       correct.className =
         "rounded-lg bg-emerald-50 border border-emerald-100 px-2 py-1 text-sm font-medium text-emerald-700";
-      correct.textContent = issue.correct;
+      correct.textContent = group.correct;
 
       words.appendChild(wrong);
       words.appendChild(arrow);
       words.appendChild(correct);
 
+      if (group.count > 1) {
+        const count = document.createElement("span");
+        count.className =
+          "rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500";
+        count.textContent = `พบ ${group.count} ครั้ง`;
+        words.appendChild(count);
+      }
+
       const hint = document.createElement("p");
       hint.className = "text-[11px] text-slate-400 mt-1";
       hint.textContent =
-        issue.type === "dictionary"
+        group.type === "dictionary"
           ? "คำที่อาจสะกดผิด"
           : "พบตัวอักษรซ้ำท้ายคำ โปรดตรวจสอบ";
 
@@ -692,15 +738,15 @@
       fixBtn.type = "button";
       fixBtn.className =
         "text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 px-3 py-2 rounded-lg transition";
-      fixBtn.textContent = "แก้ไข";
-      fixBtn.onclick = () => applySpellFix(idx);
+      fixBtn.textContent = group.count > 1 ? "แก้ไขทั้งหมด" : "แก้ไข";
+      fixBtn.onclick = () => applyGroupedSpellFix(group.wrong, group.correct);
 
       const ignoreBtn = document.createElement("button");
       ignoreBtn.type = "button";
       ignoreBtn.className =
         "text-xs font-medium text-slate-500 bg-white border border-slate-200 hover:border-slate-300 px-3 py-2 rounded-lg transition";
       ignoreBtn.textContent = "ข้าม";
-      ignoreBtn.onclick = () => ignoreSpellIssue(idx);
+      ignoreBtn.onclick = () => ignoreGroupedSpellIssue(group.wrong, group.correct);
 
       actions.appendChild(fixBtn);
       actions.appendChild(ignoreBtn);
@@ -711,6 +757,31 @@
     });
 
     panel.classList.remove("hidden");
+  }
+
+  function applyGroupedSpellFix(wrong, correct) {
+    const text = newsContentEl.value;
+
+    if (!text.includes(wrong)) {
+      runThaiSpellCheck();
+      return;
+    }
+
+    newsContentEl.value = text.split(wrong).join(correct);
+
+    document.getElementById("copyCorrectedBtn").classList.remove("hidden");
+
+    updateCharacterCount();
+    updateClearButton();
+
+    currentSpellIssues = findThaiSpellIssues(newsContentEl.value);
+    renderSpellIssues();
+  }
+
+  function ignoreGroupedSpellIssue(wrong, correct) {
+    ignoredSpellItems.add(`${wrong}|${correct}`);
+    currentSpellIssues = findThaiSpellIssues(newsContentEl.value);
+    renderSpellIssues();
   }
 
   function applySpellFix(issueIndex) {
@@ -1267,6 +1338,116 @@
     }
   }
 
+  function escapeWebsiteHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function getWebsitePointLines() {
+    return String(lastPointsText || "")
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .filter(line => !/^สรุปประเด็น(?:สำคัญ|ข่าว)/i.test(line))
+      .map(line =>
+        line
+          .replace(/^\s*[•\-–—]\s*/, "")
+          .replace(/^\s*\d+[.)]\s*/, "")
+          .trim()
+      )
+      .filter(Boolean);
+  }
+
+  function formatWebsitePoint(text) {
+    const safe = escapeWebsiteHtml(text);
+    const colonIndex = text.search(/[:：]/);
+
+    if (colonIndex > 0 && colonIndex <= 60) {
+      const label = escapeWebsiteHtml(text.slice(0, colonIndex + 1));
+      const detail = escapeWebsiteHtml(text.slice(colonIndex + 1).trim());
+
+      return `<span style="font-family:inherit !important; font-size:1em !important; font-weight:600 !important; line-height:inherit !important;">${label}</span>${detail ? " " + detail : ""}`;
+    }
+
+    return safe;
+  }
+
+  function buildWebsiteSummaryBox() {
+    const points = getWebsitePointLines();
+
+    let html = `<div style="background:#f0f9ff; border-left:5px solid #0ea5e9; padding:14px 16px; border-radius:10px; margin:16px 0; font-family:inherit !important; line-height:1.8 !important; color:#222; font-size:16px !important; text-size-adjust:100%; -webkit-text-size-adjust:100%;">\n`;
+    html += `  <div style="font-family:inherit !important; font-size:1em !important; font-weight:600 !important; color:#0f3b57; margin-bottom:12px; line-height:1.8 !important;">สรุปประเด็นข่าว :</div>\n`;
+
+    if (!points.length) {
+      html += `  <div>ยังไม่มีข้อมูลสรุปประเด็นข่าว</div>\n`;
+    } else {
+      points.forEach(point => {
+        html += `  <div style="display:flex; gap:10px; align-items:flex-start; margin-bottom:10px; font-family:inherit !important; font-size:1em !important; line-height:1.8 !important;">\n`;
+        html += `    <div style="width:16px; flex:0 0 16px; font-family:inherit !important; font-size:1em !important; line-height:1.8 !important; color:#111827;">•</div>\n`;
+        html += `    <div style="flex:1; font-family:inherit !important; font-size:1em !important; font-weight:400 !important; line-height:1.8 !important;">${formatWebsitePoint(point)}</div>\n`;
+        html += `  </div>\n`;
+      });
+    }
+
+    html += `</div>`;
+    return html;
+  }
+
+  function buildWebsiteCode(mode) {
+    const innerHtml = buildWebsiteSummaryBox();
+
+    if (mode !== "collapse") {
+      return innerHtml;
+    }
+
+    const indented = innerHtml
+      .split("\n")
+      .map(line => "    " + line)
+      .join("\n");
+
+    return `<details style="margin:16px 0; font-family:inherit !important;">
+  <summary style="cursor:pointer; background:#f0f9ff; border-left:5px solid #0ea5e9; padding:12px 16px; border-radius:10px; font-family:inherit !important; font-size:16px !important; font-weight:600 !important; color:#0f3b57; line-height:1.8 !important;">
+    คลิกเพื่ออ่านสรุปประเด็นข่าว
+  </summary>
+  <div style="margin-top:8px;">
+${indented}
+  </div>
+</details>`;
+  }
+
+  async function copyWebsiteCode(mode) {
+    if (!lastPointsText.trim()) {
+      showError("ยังไม่มีสรุปประเด็นสำคัญสำหรับสร้างโค้ด");
+      return;
+    }
+
+    const isCollapse = mode === "collapse";
+    const label = document.getElementById(
+      isCollapse ? "copyWebsiteCollapseText" : "copyWebsiteNormalText"
+    );
+
+    const originalText = isCollapse
+      ? "คัดลอกโค้ดแบบซ่อน"
+      : "คัดลอกโค้ดแบบไม่ซ่อน";
+
+    try {
+      const code = buildWebsiteCode(mode);
+      await writeClipboard(code);
+
+      label.innerText = "คัดลอกแล้ว ✓";
+
+      setTimeout(() => {
+        label.innerText = originalText;
+      }, 1600);
+
+    } catch {
+      showError("คัดลอกโค้ดไม่สำเร็จ กรุณาลองใหม่");
+    }
+  }
+
   async function copyPart(part) {
     const isEssay = part === "essay";
     const text = isEssay ? lastEssayText : lastPointsText;
@@ -1414,6 +1595,11 @@
       lastEssayText = essay;
       lastPointsText = points;
       lastHeadlineTexts = headlines;
+
+      document.getElementById("copyWebsiteCollapseText").innerText =
+        "คัดลอกโค้ดแบบซ่อน";
+      document.getElementById("copyWebsiteNormalText").innerText =
+        "คัดลอกโค้ดแบบไม่ซ่อน";
 
       document.getElementById("essayResult").innerHTML =
         formatAiText(essay);
