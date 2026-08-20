@@ -583,7 +583,7 @@
 
     if (stage === 4) {
       title.innerText = "กำลังจัดผลลัพธ์";
-      detail.innerText = "แยกสรุปแบบความเรียงและประเด็นสำคัญ";
+      detail.innerText = "แยกพาดหัว 3 แบบ สรุปความเรียง และประเด็นสำคัญ";
       bar.style.width = "94%";
 
       setStepState("stepPrepare", "done");
@@ -667,6 +667,79 @@
       .replace(/\n/g, "<br>");
   }
 
+  function parseStructuredResult(text) {
+    let source = String(text || "").trim();
+
+    // Some providers may still wrap JSON in Markdown fences.
+    source = source
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    try {
+      const data = JSON.parse(source);
+
+      const rawHeadlines = Array.isArray(data?.headlines)
+        ? data.headlines
+        : [];
+
+      const headlines = rawHeadlines.slice(0, 3).map(item => {
+        if (Array.isArray(item)) {
+          return item
+            .slice(0, 3)
+            .map(line => String(line || "").trim())
+            .filter(Boolean)
+            .join("\n");
+        }
+
+        if (typeof item === "string") {
+          return item
+            .split(/\n+/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .slice(0, 3)
+            .join("\n");
+        }
+
+        return "";
+      });
+
+      while (headlines.length < 3) {
+        headlines.push("");
+      }
+
+      const essay =
+        typeof data?.essay === "string"
+          ? data.essay.trim()
+          : "";
+
+      const pointsArray =
+        Array.isArray(data?.points)
+          ? data.points
+              .map(point => String(point || "").trim())
+              .filter(Boolean)
+          : [];
+
+      return {
+        ok:
+          headlines.some(Boolean) ||
+          Boolean(essay) ||
+          pointsArray.length > 0,
+        headlines,
+        essay,
+        points: pointsArray.map(point => "• " + point).join("\n")
+      };
+
+    } catch {
+      return {
+        ok: false,
+        headlines: ["", "", ""],
+        essay: "",
+        points: ""
+      };
+    }
+  }
+
   function parseHeadlineOptions(text) {
     const source = String(text || "")
       .replace(/\r\n/g, "\n")
@@ -675,29 +748,59 @@
     const results = [];
 
     for (let i = 1; i <= 3; i++) {
-      const pattern = new RegExp(
-        "<<<HEADLINE_" + i + ">>>\\\\s*([\\\\s\\\\S]*?)\\\\s*<<<END_HEADLINE_" + i + ">>>",
+      const markerPattern = new RegExp(
+        "<<<HEADLINE_" + i + ">>>\\s*([\\s\\S]*?)\\s*<<<END_HEADLINE_" + i + ">>>",
         "i"
       );
 
-      const match = source.match(pattern);
-      let value = match ? match[1].trim() : "";
+      const markerMatch = source.match(markerPattern);
+      let value = markerMatch ? markerMatch[1].trim() : "";
+
+      if (!value) {
+        // Tolerate headings such as:
+        // แบบที่ 1 / พาดหัวแบบที่ 1 / พาดหัวข่าวแบบที่ 1 / **แบบที่ 1**
+        const heading = new RegExp(
+          "(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?\\s*" +
+          "(?:พาดหัว(?:ข่าว)?\\s*)?แบบ(?:ที่)?\\s*" + i +
+          "\\s*(?:\\*\\*)?\\s*[:：-]?\\s*(?:\\n|$)",
+          "i"
+        );
+
+        const nextHeading = i < 3
+          ? new RegExp(
+              "(?:^|\\n)\\s*(?:#{1,6}\\s*)?(?:\\*\\*)?\\s*" +
+              "(?:พาดหัว(?:ข่าว)?\\s*)?แบบ(?:ที่)?\\s*" + (i + 1) +
+              "\\s*(?:\\*\\*)?\\s*[:：-]?\\s*(?:\\n|$)",
+              "i"
+            )
+          : /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?\s*สรุปแบบความเรียง\s*(?:\*\*)?\s*(?:\n|$)/i;
+
+        const current = heading.exec(source);
+
+        if (current) {
+          const tail = source.slice(current.index + current[0].length);
+          const next = nextHeading.exec(tail);
+
+          value = (
+            next
+              ? tail.slice(0, next.index)
+              : tail
+          ).trim();
+        }
+      }
 
       if (value) {
-        // Remove accidental bullets/labels while preserving 3-line copy format.
         let lines = value
           .split("\n")
           .map(line =>
             line
               .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
               .replace(/^\s*บรรทัด(?:ที่)?\s*\d+\s*[:：-]?\s*/i, "")
+              .replace(/^\s*\*\*|\*\*\s*$/g, "")
               .trim()
           )
-          .filter(Boolean);
-
-        if (lines.length > 3) {
-          lines = lines.slice(0, 3);
-        }
+          .filter(Boolean)
+          .slice(0, 3);
 
         value = lines.join("\n");
       }
@@ -953,23 +1056,38 @@
 
       setProcessingStage(4);
 
-      const headlines = parseHeadlineOptions(data.text);
-      const parts = splitSummaryParts(data.text);
+      const structured = parseStructuredResult(data.text);
 
-      lastEssayText = parts.essay;
-      lastPointsText = parts.points;
+      const headlines = structured.ok
+        ? structured.headlines
+        : parseHeadlineOptions(data.text);
+
+      const fallbackParts = structured.ok
+        ? null
+        : splitSummaryParts(data.text);
+
+      const essay = structured.ok
+        ? structured.essay
+        : fallbackParts.essay;
+
+      const points = structured.ok
+        ? structured.points
+        : fallbackParts.points;
+
+      lastEssayText = essay;
+      lastPointsText = points;
       lastHeadlineTexts = headlines;
 
       document.getElementById("essayResult").innerHTML =
-        formatAiText(parts.essay);
+        formatAiText(essay);
 
       document.getElementById("pointsResult").innerHTML =
-        formatAiText(parts.points);
+        formatAiText(points);
 
       for (let i = 0; i < 3; i++) {
         const headlineEl = document.getElementById("headlineResult" + i);
         headlineEl.textContent =
-          headlines[i] || "ไม่พบพาดหัวแบบนี้จากคำตอบของ AI";
+          headlines[i] || "AI ไม่ได้สร้างพาดหัวแบบนี้";
       }
 
       const modelText =
