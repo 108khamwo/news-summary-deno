@@ -15,6 +15,7 @@ const CACHE_TTL_MINUTES = envInt("CACHE_TTL_MINUTES", 360);
 
 const GEMINI_MODELS = [
   { id: "gemini-3.5-flash", thinkingLevel: "LOW" },
+  { id: "gemini-3.5-flash-lite", thinkingLevel: "MINIMAL" },
   { id: "gemini-3.1-flash-lite", thinkingLevel: "MINIMAL" },
 ];
 
