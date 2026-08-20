@@ -1427,11 +1427,108 @@ async function waitForGeminiFile(fileName, maxWaitMs = 300000) {
   throw new Error("Gemini ยังเตรียมไฟล์ไม่เสร็จ กรุณารอสักครู่แล้วลองอีกครั้ง");
 }
 
+function mediaHeadlineRules() {
+  return `
+สร้างพาดหัวข่าวจาก "ประเด็นหลักที่สุดของไฟล์" จำนวน 3 แบบพอดี
+แต่ละแบบมี 3 บรรทัดพอดี และทั้ง 3 แบบต้องอยู่บนแกนข่าวหลักเดียวกัน
+
+กติกาพาดหัว:
+- แบบที่ 1 = ข่าวตรง / ทางการ / กระชับที่สุด
+- แบบที่ 2 = เน้นสิ่งที่คนอ่านต้องรู้ ผลกระทบ คำแนะนำ หรือตัวเลขสำคัญ
+- แบบที่ 3 = ดึงดูดความสนใจมากขึ้น แต่ต้องเป็นข้อเท็จจริง ไม่ clickbait
+- หา "สถานะปัจจุบัน" หรือข้อเท็จจริงหลักก่อนข้อมูลรอง
+- ถ้ามีทั้งสถานะปัจจุบันและคำแนะนำ ให้สถานะปัจจุบันมาก่อน
+- ห้ามนำข้อมูลพื้นหลัง ความเสี่ยงที่ยังไม่เกิด หรือรายละเอียดรองขึ้นนำ เว้นแต่เป็นประเด็นหลักจริง
+- แต่ละบรรทัดควรสั้นประมาณ 3-7 คำ เมื่อทำได้
+- ใช้ภาษาข่าวธรรมชาติ ไม่ใช้ภาษาราชการฟุ่มเฟือย
+- ห้ามตัดวลีกลางความหมาย
+- ห้ามแต่งชื่อ หน่วยงาน สถานที่ ตัวเลข วันที่ เวลา หรือเหตุการณ์
+- ห้ามใส่ Bullet หมายเลข Hashtag หรือเครื่องหมายคำพูดครอบพาดหัว
+- ห้ามใส่จุด full stop ปิดท้ายแต่ละบรรทัด
+- แบบที่ 3 ห้ามใช้คำเกินจริง เช่น ช็อก สุดอึ้ง สะเทือน ห้ามพลาด ด่วนมาก หากไฟล์ไม่ได้รองรับระดับนั้น
+  `.trim();
+}
+
 function mediaPrompt(mode, isVideo) {
-  const guard = `ใช้เฉพาะข้อมูลที่ได้ยิน${isVideo ? "หรือเห็นชัดเจน" : ""}จากไฟล์นี้เท่านั้น ห้ามค้นเว็บ ห้ามเติมข้อมูล ห้ามเดาชื่อ ตัวเลข วันที่ เวลา หรือสถานที่ ถ้าไม่ชัดให้ระบุว่า [ไม่ชัดเจน]`;
-  if (mode === "transcript") return `${guard}\n\nถอดคำพูดทั้งหมดตั้งแต่ต้นจนจบให้ครบที่สุด ห้ามสรุปหรือเรียบเรียงใหม่ รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงิน ถ้ามีหลายผู้พูดและแยกได้ให้ใช้ ผู้พูด 1:, ผู้พูด 2: โดยห้ามเดาชื่อ ถ้าฟังไม่ชัดให้ใส่ [ฟังไม่ชัด] จัดย่อหน้าให้อ่านง่าย${isVideo ? " เน้นเสียงพูด ไม่ต้องบรรยายภาพเว้นแต่ข้อความบนภาพจำเป็นต่อความเข้าใจ" : ""}`;
-  if (mode === "article") return `${guard}\n\nเขียนข้อมูลในไฟล์ใหม่เป็นข่าวภาษาไทยพร้อมตรวจแก้ก่อนเผยแพร่ เริ่มด้วยพาดหัวข่าว 1 บรรทัด แล้วเขียนเนื้อข่าวเป็นย่อหน้าแบบข่าวจริง จัดข้อมูลสำคัญก่อน เก็บสาระว่าเกิดอะไรขึ้น ใครเกี่ยวข้อง ที่ไหน เมื่อไร และผลกระทบเท่าที่ไฟล์ระบุ ห้ามสร้างคำพูดอ้างอิงที่ไม่มีจริง${isVideo ? " สามารถใช้ข้อเท็จจริงที่เห็นชัดจากภาพได้" : ""}`;
-  return `${guard}\n\nสรุปประเด็นสำคัญประมาณ 5-12 ข้อตามปริมาณเนื้อหา ใช้ • นำหน้าแต่ละข้อ แต่ละข้อกระชับแต่มีข้อมูลพอเข้าใจ รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงินให้ตรงกับไฟล์ ไม่ต้องมีบทนำหรือบทสรุปซ้ำ`;
+  const guard =
+    `ใช้เฉพาะข้อมูลที่ได้ยิน${isVideo ? "หรือเห็นชัดเจน" : ""}จากไฟล์นี้เท่านั้น ` +
+    `ห้ามค้นเว็บ ห้ามเติมข้อมูล ห้ามเดาชื่อ ตัวเลข วันที่ เวลา หรือสถานที่ ` +
+    `ถ้าไม่ชัดให้ระบุว่า [ไม่ชัดเจน]`;
+
+  let task = "";
+
+  if (mode === "transcript") {
+    task = `
+ถอดคำพูดทั้งหมดตั้งแต่ต้นจนจบให้ครบที่สุด
+- ห้ามสรุปหรือเรียบเรียงคำพูดใหม่
+- รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงิน
+- ถ้ามีหลายผู้พูดและแยกได้ ให้ใช้ ผู้พูด 1:, ผู้พูด 2: โดยห้ามเดาชื่อ
+- ถ้าฟังไม่ชัดให้ใส่ [ฟังไม่ชัด]
+- จัดย่อหน้าให้อ่านง่าย แต่ห้ามตัดเนื้อหา
+${isVideo ? "- เน้นเสียงพูด ไม่ต้องบรรยายภาพ เว้นแต่ข้อความบนภาพจำเป็นต่อความเข้าใจ" : ""}
+ฟิลด์ content ต้องเป็น transcript เต็มเท่านั้น ห้ามเอาพาดหัวไปปนใน transcript
+    `.trim();
+  } else if (mode === "article") {
+    task = `
+เขียนข้อมูลในไฟล์ใหม่เป็นข่าวภาษาไทยพร้อมตรวจแก้ก่อนเผยแพร่
+- ฟิลด์ content ให้เป็น "เนื้อข่าว" เท่านั้น ไม่ต้องใส่พาดหัวซ้ำ เพราะมีฟิลด์ headlines แยกอยู่แล้ว
+- เขียนเป็นย่อหน้าแบบข่าวจริง จัดข้อมูลสำคัญก่อน
+- เก็บสาระว่าเกิดอะไรขึ้น ใครเกี่ยวข้อง ที่ไหน เมื่อไร และผลกระทบ เท่าที่ไฟล์ระบุ
+- ห้ามสร้างคำพูดอ้างอิงที่ไม่มีจริง
+${isVideo ? "- สามารถใช้ข้อเท็จจริงที่เห็นชัดจากภาพประกอบข่าวได้ แต่ห้ามอนุมานเกินสิ่งที่เห็น" : ""}
+    `.trim();
+  } else {
+    task = `
+สรุปประเด็นสำคัญประมาณ 5-12 ข้อตามปริมาณเนื้อหา
+- ฟิลด์ content ให้ใช้ • นำหน้าแต่ละข้อ
+- แต่ละข้อกระชับ แต่มีข้อมูลเพียงพอให้เข้าใจ
+- รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงินให้ตรงกับไฟล์
+- ไม่ต้องมีบทนำหรือบทสรุปซ้ำ
+    `.trim();
+  }
+
+  return `
+${guard}
+
+${mediaHeadlineRules()}
+
+งานหลัก:
+${task}
+
+ตอบเป็น JSON เท่านั้น ตามโครงสร้างนี้:
+{
+  "headlines": [
+    ["แบบที่ 1 บรรทัด 1", "แบบที่ 1 บรรทัด 2", "แบบที่ 1 บรรทัด 3"],
+    ["แบบที่ 2 บรรทัด 1", "แบบที่ 2 บรรทัด 2", "แบบที่ 2 บรรทัด 3"],
+    ["แบบที่ 3 บรรทัด 1", "แบบที่ 3 บรรทัด 2", "แบบที่ 3 บรรทัด 3"]
+  ],
+  "content": "ผลลัพธ์ของงานหลัก"
+}
+
+สำคัญ:
+- พาดหัวและ content ต้องสร้างจากไฟล์เดียวกันในคำขอนี้
+- ห้ามตัด content เพื่อให้พาดหัวสวย
+- ห้ามใส่ Markdown code fence รอบ JSON
+  `.trim();
+}
+
+function normalizeMediaHeadlines(value) {
+  if (!Array.isArray(value)) return ["", "", ""];
+
+  const out = value.slice(0, 3).map((item) => {
+    if (Array.isArray(item)) {
+      return item
+        .slice(0, 3)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    return String(item || "").trim();
+  });
+
+  while (out.length < 3) out.push("");
+  return out;
 }
 
 async function callGeminiMedia(modelInfo, file, mode) {
@@ -1441,8 +1538,34 @@ async function callGeminiMedia(modelInfo, file, mode) {
   if (!isVideo && !isAudio) throw makeProviderError("Gemini", 400, "ไฟล์นี้ไม่ใช่เสียงหรือวิดีโอที่รองรับ", modelInfo.id);
 
   const generationConfig = {
-    maxOutputTokens: mode === "transcript" ? 65536 : mode === "article" ? 16000 : 10000,
-    thinkingConfig: { thinkingLevel: modelInfo.thinkingLevel },
+    maxOutputTokens:
+      mode === "transcript"
+        ? 65536
+        : mode === "article"
+          ? 16000
+          : 10000,
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "OBJECT",
+      properties: {
+        headlines: {
+          type: "ARRAY",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "ARRAY",
+            minItems: 3,
+            maxItems: 3,
+            items: { type: "STRING" }
+          }
+        },
+        content: { type: "STRING" }
+      },
+      required: ["headlines", "content"]
+    },
+    thinkingConfig: {
+      thinkingLevel: modelInfo.thinkingLevel
+    },
   };
   if (isVideo) generationConfig.mediaResolution = "MEDIA_RESOLUTION_LOW";
 
@@ -1469,15 +1592,53 @@ async function callGeminiMedia(modelInfo, file, mode) {
     throw makeProviderError("Gemini", response.status, data?.error?.message || `Gemini HTTP ${response.status}`, modelInfo.id);
   }
 
-  const text = (data?.candidates?.[0]?.content?.parts || [])
+  const rawText = (data?.candidates?.[0]?.content?.parts || [])
     .map((part) => typeof part.text === "string" ? part.text : "")
-    .join("").trim();
-  if (!text) throw makeProviderError("Gemini", 502, "Gemini ตอบกลับมาแต่ไม่พบข้อความ", modelInfo.id);
+    .join("")
+    .trim();
+
+  if (!rawText) {
+    throw makeProviderError(
+      "Gemini",
+      502,
+      "Gemini ตอบกลับมาแต่ไม่พบข้อความ",
+      modelInfo.id,
+    );
+  }
+
+  let parsed = null;
+
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    // structured output should normally be JSON; keep a safe fallback
+  }
+
+  const text =
+    typeof parsed?.content === "string"
+      ? parsed.content.trim()
+      : rawText;
+
+  const headlines = normalizeMediaHeadlines(
+    parsed?.headlines
+  );
+
+  if (!text) {
+    throw makeProviderError(
+      "Gemini",
+      502,
+      "Gemini ไม่ได้สร้างผลลัพธ์หลักจากไฟล์",
+      modelInfo.id,
+    );
+  }
 
   const usage = data?.usageMetadata || {};
-  const finishReason = data?.candidates?.[0]?.finishReason || null;
+  const finishReason =
+    data?.candidates?.[0]?.finishReason || null;
+
   return {
     text,
+    headlines,
     provider: "Gemini",
     model: modelInfo.id,
     finishReason,

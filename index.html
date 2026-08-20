@@ -343,6 +343,10 @@
           </div>
         </div>
 
+        <p class="mt-3 text-xs text-emerald-600">
+          ผลลัพธ์แต่ละโหมดจะถูกจำไว้สำหรับไฟล์นี้ สลับกลับมาได้โดยไม่ใช้โควต้าเพิ่ม
+        </p>
+
         <button id="processMediaBtn" type="button" onclick="processMediaFile()" disabled
                 class="mt-6 w-full rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-semibold py-4 px-5 transition flex justify-center items-center gap-3 shadow-lg shadow-slate-900/10 disabled:opacity-40 disabled:cursor-not-allowed">
           <svg id="mediaSpinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
@@ -546,6 +550,63 @@
     </div>
     <div class="p-5 md:p-7">
       <div id="mediaResultText" class="ai-result whitespace-pre-wrap text-slate-700 leading-8 text-[15px]"></div>
+
+      <section id="mediaHeadlineSection" class="mt-6 rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-3.5 md:px-5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="font-semibold text-slate-800">พาดหัวข่าว 3 แบบ</h3>
+          <span class="text-[11px] text-emerald-600">สร้างพร้อมผลลัพธ์ • ไม่เรียก AI เพิ่ม</span>
+        </div>
+
+        <div class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div>
+                <span class="text-sm font-semibold text-slate-700">แบบที่ 1</span>
+                <span class="text-[11px] text-slate-400 ml-2">ข่าวตรง</span>
+              </div>
+              <button type="button"
+                      onclick="copyMediaHeadline(0)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyMediaHeadlineText0">คัดลอก</span>
+              </button>
+            </div>
+            <div id="mediaHeadlineResult0"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div>
+                <span class="text-sm font-semibold text-slate-700">แบบที่ 2</span>
+                <span class="text-[11px] text-slate-400 ml-2">เน้นสิ่งที่ต้องรู้</span>
+              </div>
+              <button type="button"
+                      onclick="copyMediaHeadline(1)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyMediaHeadlineText1">คัดลอก</span>
+              </button>
+            </div>
+            <div id="mediaHeadlineResult1"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div>
+                <span class="text-sm font-semibold text-slate-700">แบบที่ 3</span>
+                <span class="text-[11px] text-amber-600 ml-2">ดึงดูดความสนใจ</span>
+              </div>
+              <button type="button"
+                      onclick="copyMediaHeadline(2)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyMediaHeadlineText2">คัดลอก</span>
+              </button>
+            </div>
+            <div id="mediaHeadlineResult2"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
+        </div>
+      </section>
       <div id="mediaTruncatedWarning" class="hidden mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">ผลลัพธ์ยาวถึงขีดจำกัดของโมเดล อาจมีข้อความช่วงท้ายไม่ครบ โดยเฉพาะโหมดถอดข้อความจากไฟล์ยาวมาก</div>
       <details class="mt-5 rounded-2xl border border-slate-200 bg-slate-50/60"><summary class="cursor-pointer select-none px-4 py-3 text-xs font-medium text-slate-500">รายละเอียด Token</summary>
         <div class="border-t border-slate-200 px-4 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -577,6 +638,8 @@
   let localMediaFile = null;
   let uploadedMediaFile = null;
   let lastMediaResultText = "";
+  let lastMediaHeadlineTexts = ["", "", ""];
+  let mediaResultsByMode = {};
   let mediaElapsedTimer = null;
   let mediaStartedAt = 0;
 
@@ -1284,6 +1347,17 @@
     [textTab, mediaTab].forEach(el => el.className = "flex-1 sm:flex-none rounded-xl px-4 py-2.5 text-sm font-medium transition text-slate-500");
     const active = isMedia ? mediaTab : textTab;
     active.className = "flex-1 sm:flex-none rounded-xl bg-white text-slate-900 shadow-sm px-4 py-2.5 text-sm font-medium transition";
+
+    if (
+      isMedia &&
+      mediaResultsByMode[selectedMediaMode]
+    ) {
+      renderCachedMediaResult(
+        selectedMediaMode,
+        false
+      );
+    }
+
     hideError();
   }
 
@@ -1308,13 +1382,181 @@
     return `${(n/1024**3).toFixed(2)} GB`;
   }
 
+  function mediaResultTitle(mode) {
+    return mode === "transcript"
+      ? "ถอดข้อความทั้งหมด"
+      : mode === "article"
+        ? "เขียนเป็นข่าว"
+        : "สรุปประเด็นสำคัญ";
+  }
+
+  function normalizeMediaHeadlineList(value) {
+    const list = Array.isArray(value)
+      ? value.slice(0, 3).map(item => {
+          if (Array.isArray(item)) {
+            return item
+              .slice(0, 3)
+              .map(line => String(line || "").trim())
+              .filter(Boolean)
+              .join("\n");
+          }
+          return String(item || "").trim();
+        })
+      : [];
+
+    while (list.length < 3) list.push("");
+    return list;
+  }
+
+  function renderMediaHeadlines(headlines) {
+    lastMediaHeadlineTexts =
+      normalizeMediaHeadlineList(headlines);
+
+    for (let i = 0; i < 3; i++) {
+      const el = document.getElementById(
+        "mediaHeadlineResult" + i
+      );
+
+      if (el) {
+        el.textContent =
+          lastMediaHeadlineTexts[i] ||
+          "AI ไม่ได้สร้างพาดหัวแบบนี้";
+      }
+
+      const copyLabel = document.getElementById(
+        "copyMediaHeadlineText" + i
+      );
+
+      if (copyLabel) {
+        copyLabel.textContent = "คัดลอก";
+      }
+    }
+  }
+
+  function updateMediaProcessButton() {
+    const btn = document.getElementById("processMediaBtn");
+    const label =
+      document.getElementById("mediaProcessBtnText");
+
+    if (!btn || !label) return;
+
+    if (!uploadedMediaFile?.name) {
+      btn.disabled = true;
+      label.textContent = "ประมวลผลไฟล์";
+      return;
+    }
+
+    btn.disabled = false;
+    label.textContent =
+      mediaResultsByMode[selectedMediaMode]
+        ? "ประมวลผลใหม่"
+        : "ประมวลผลไฟล์";
+  }
+
+  function renderCachedMediaResult(mode, scroll = false) {
+    const cached = mediaResultsByMode[mode];
+
+    if (!cached) return false;
+
+    lastMediaResultText =
+      String(cached.text || "").trim();
+
+    document.getElementById("mediaResultTitle").textContent =
+      mediaResultTitle(mode);
+
+    document.getElementById("mediaUsedModel").textContent =
+      `${cached.provider || "Gemini"} • ${cached.model || "ไม่ทราบโมเดล"} • ผลลัพธ์เดิม`;
+
+    document.getElementById("mediaResultText").textContent =
+      lastMediaResultText;
+
+    document.getElementById("mediaTruncatedWarning")
+      .classList.toggle("hidden", !cached.truncated);
+
+    showMediaUsage(cached.usage || {});
+    renderMediaHeadlines(cached.headlines || []);
+
+    const box =
+      document.getElementById("mediaResultContainer");
+
+    box.classList.remove("hidden");
+    box.classList.remove("opacity-0");
+    box.classList.add("opacity-100");
+
+    if (scroll) {
+      box.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }
+
+    return true;
+  }
+
+  async function copyMediaHeadline(index) {
+    const text =
+      String(lastMediaHeadlineTexts[index] || "").trim();
+
+    if (!text) {
+      showError("ยังไม่มีพาดหัวให้คัดลอก");
+      return;
+    }
+
+    const label =
+      document.getElementById(
+        "copyMediaHeadlineText" + index
+      );
+
+    try {
+      await writeClipboard(text);
+      if (label) label.textContent = "คัดลอกแล้ว ✓";
+
+      setTimeout(() => {
+        if (label) label.textContent = "คัดลอก";
+      }, 1500);
+    } catch {
+      showError("คัดลอกพาดหัวไม่สำเร็จ");
+    }
+  }
+
   function selectMediaMode(mode) {
-    selectedMediaMode = ["transcript", "article", "points"].includes(mode) ? mode : "transcript";
-    const map = { transcript: "mediaModeTranscript", article: "mediaModeArticle", points: "mediaModePoints" };
+    selectedMediaMode =
+      ["transcript", "article", "points"].includes(mode)
+        ? mode
+        : "transcript";
+
+    const map = {
+      transcript: "mediaModeTranscript",
+      article: "mediaModeArticle",
+      points: "mediaModePoints"
+    };
+
     Object.entries(map).forEach(([key, id]) => {
       const el = document.getElementById(id);
-      el.className = "text-left rounded-2xl px-4 py-4 transition " + (key === selectedMediaMode ? "border-2 border-slate-900 bg-slate-50" : "border border-slate-200 bg-white hover:border-slate-300");
+
+      el.className =
+        "text-left rounded-2xl px-4 py-4 transition " +
+        (key === selectedMediaMode
+          ? "border-2 border-slate-900 bg-slate-50"
+          : "border border-slate-200 bg-white hover:border-slate-300");
     });
+
+    updateMediaProcessButton();
+
+    if (!renderCachedMediaResult(
+      selectedMediaMode,
+      false
+    )) {
+      lastMediaResultText = "";
+      lastMediaHeadlineTexts = ["", "", ""];
+
+      const box =
+        document.getElementById("mediaResultContainer");
+
+      box.classList.add("hidden");
+      box.classList.remove("opacity-100");
+      box.classList.add("opacity-0");
+    }
   }
 
   function updateMediaCard(file, note = "") {
@@ -1465,7 +1707,11 @@
     if (file.size > maxMediaBytes) { showError(`ไฟล์ใหญ่เกิน ${formatBytes(maxMediaBytes)}`); return; }
 
     if (uploadedMediaFile?.name) deleteUploadedMedia(uploadedMediaFile.name);
-    localMediaFile = file; uploadedMediaFile = null; lastMediaResultText = "";
+    localMediaFile = file;
+    uploadedMediaFile = null;
+    lastMediaResultText = "";
+    lastMediaHeadlineTexts = ["", "", ""];
+    mediaResultsByMode = {};
     document.getElementById("processMediaBtn").disabled = true;
     document.getElementById("mediaResultContainer").classList.add("hidden");
     updateMediaCard(file, "กำลังเตรียมอัปโหลด");
@@ -1489,7 +1735,7 @@
       document.getElementById("mediaUploadBar").style.width = "100%";
       document.getElementById("mediaStatusText").textContent = "อัปโหลดเสร็จแล้ว";
       updateMediaCard(file, "พร้อมประมวลผล");
-      document.getElementById("processMediaBtn").disabled = false;
+      updateMediaProcessButton();
       setTimeout(() => status.classList.add("hidden"), 1600);
     } catch (error) {
       status.classList.add("hidden");
@@ -1505,7 +1751,11 @@
 
   async function removeMediaFile() {
     const old = uploadedMediaFile?.name;
-    localMediaFile = null; uploadedMediaFile = null; lastMediaResultText = "";
+    localMediaFile = null;
+    uploadedMediaFile = null;
+    lastMediaResultText = "";
+    lastMediaHeadlineTexts = ["", "", ""];
+    mediaResultsByMode = {};
     document.getElementById("mediaFileInput").value = "";
     document.getElementById("mediaFileState").classList.add("hidden");
     document.getElementById("mediaEmptyState").classList.remove("hidden");
@@ -1544,19 +1794,64 @@
       const response = await fetch("/api/media/process", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fileName: uploadedMediaFile.name, mode: selectedMediaMode, clientId: getClientId() }) });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`);
-      lastMediaResultText = String(data.text || "").trim();
-      const title = selectedMediaMode === "transcript" ? "ถอดข้อความทั้งหมด" : selectedMediaMode === "article" ? "เขียนเป็นข่าว" : "สรุปประเด็นสำคัญ";
-      document.getElementById("mediaResultTitle").textContent = title;
-      document.getElementById("mediaUsedModel").textContent = `${data.provider} • ${data.model}`;
-      document.getElementById("mediaResultText").textContent = lastMediaResultText;
-      document.getElementById("mediaTruncatedWarning").classList.toggle("hidden", !data.truncated);
+      lastMediaResultText =
+        String(data.text || "").trim();
+
+      lastMediaHeadlineTexts =
+        normalizeMediaHeadlineList(
+          data.headlines || []
+        );
+
+      mediaResultsByMode[selectedMediaMode] = {
+        text: lastMediaResultText,
+        headlines: [...lastMediaHeadlineTexts],
+        provider: data.provider,
+        model: data.model,
+        usage: data.usage || {},
+        truncated: !!data.truncated,
+        finishReason: data.finishReason || null,
+        savedAt: Date.now()
+      };
+
+      document.getElementById("mediaResultTitle").textContent =
+        mediaResultTitle(selectedMediaMode);
+
+      document.getElementById("mediaUsedModel").textContent =
+        `${data.provider} • ${data.model}`;
+
+      document.getElementById("mediaResultText").textContent =
+        lastMediaResultText;
+
+      document.getElementById("mediaTruncatedWarning")
+        .classList.toggle("hidden", !data.truncated);
+
       showMediaUsage(data.usage || {});
-      const box = document.getElementById("mediaResultContainer"); box.classList.remove("hidden"); requestAnimationFrame(() => { box.classList.remove("opacity-0"); box.classList.add("opacity-100"); box.scrollIntoView({ behavior: "smooth", block: "start" }); });
+      renderMediaHeadlines(lastMediaHeadlineTexts);
+      updateMediaProcessButton();
+
+      const box =
+        document.getElementById("mediaResultContainer");
+
+      box.classList.remove("hidden");
+
+      requestAnimationFrame(() => {
+        box.classList.remove("opacity-0");
+        box.classList.add("opacity-100");
+        box.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      });
       setHealth("ok", "ระบบพร้อมใช้งาน");
     } catch (error) {
       showError("ประมวลผลไฟล์ไม่สำเร็จ: " + (error.message || "ไม่ทราบสาเหตุ")); setHealth("error", "เกิดข้อผิดพลาด");
     } finally {
-      stopMediaTimer(); document.getElementById("mediaAnalyzeStatus").classList.add("hidden"); btn.disabled = !uploadedMediaFile?.name; document.getElementById("mediaSpinner").classList.add("hidden"); document.getElementById("mediaProcessBtnText").textContent = "ประมวลผลไฟล์";
+      stopMediaTimer();
+      document.getElementById("mediaAnalyzeStatus")
+        .classList.add("hidden");
+      document.getElementById("mediaSpinner")
+        .classList.add("hidden");
+      updateMediaProcessButton();
     }
   }
 
