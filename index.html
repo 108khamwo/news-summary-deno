@@ -3,207 +3,454 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
   <title>ระบบสรุปข่าวอัจฉริยะ</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    body { font-family: 'Prompt', sans-serif; }
-    .ai-result { word-wrap: break-word; }
+    :root {
+      --brand: #0f172a;
+      --brand-soft: #f8fafc;
+      --accent: #2563eb;
+      --success: #059669;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Prompt', sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.055), transparent 34rem),
+        linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+
+    .glass-shadow {
+      box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.08),
+        0 4px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    .ai-result {
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .progress-shimmer {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .progress-shimmer::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,0.55),
+        transparent
+      );
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      100% { transform: translateX(100%); }
+    }
+
+    .status-pulse {
+      animation: statusPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes statusPulse {
+      0%, 100% { opacity: .45; transform: scale(.9); }
+      50% { opacity: 1; transform: scale(1); }
+    }
+
+    .fade-up {
+      animation: fadeUp .32s ease-out;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    textarea::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    textarea::-webkit-scrollbar-thumb,
+    body::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
   </style>
 </head>
 
-<body class="bg-slate-50 min-h-screen p-4 md:p-8 text-slate-800">
+<body class="min-h-screen text-slate-800">
 
-<div class="max-w-4xl mx-auto">
+<div class="max-w-5xl mx-auto px-4 py-7 md:py-12">
 
-  <div class="bg-white rounded-2xl shadow-xl overflow-hidden p-6 md:p-8 border border-slate-100">
+  <!-- Header -->
+  <header class="mb-6 md:mb-8">
+    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div>
+        <div class="inline-flex items-center gap-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-3 py-1.5 mb-3">
+          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+          AI NEWS SUMMARY
+        </div>
 
-    <div class="text-center mb-7">
-      <h1 class="text-3xl font-bold text-slate-800 mb-2">
-        ⚡ ระบบสรุปข่าวอัจฉริยะ
-      </h1>
+        <h1 class="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">
+          ระบบสรุปข่าวอัจฉริยะ
+        </h1>
 
-      <p class="text-sm text-emerald-700 bg-emerald-50 inline-block px-4 py-1.5 rounded-full border border-emerald-200 font-medium">
-        พร้อมใช้งาน • ไม่ต้องกรอก API Key
-      </p>
-
-      <p id="providerStatus" class="text-xs text-slate-400 mt-3">
-        กำลังตรวจสอบระบบ AI...
-      </p>
-    </div>
-
-    <div id="errorBox" class="hidden mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-      <p id="errorMessage" class="text-sm text-red-700 font-medium whitespace-pre-wrap"></p>
-    </div>
-
-    <div id="statusBox" class="hidden mb-6 bg-sky-50 border border-sky-200 rounded-xl px-4 py-3">
-      <p id="statusMessage" class="text-sm text-sky-800 font-medium"></p>
-    </div>
-
-    <div class="mb-6">
-      <label class="block text-sm font-semibold text-slate-700 mb-2">
-        📄 เนื้อหาข่าวต้นฉบับ
-      </label>
-
-      <textarea
-        id="newsContent"
-        rows="11"
-        placeholder="คัดลอกเนื้อหาข่าวมาวางที่นี่..."
-        class="w-full border border-slate-300 rounded-xl p-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-y shadow-sm bg-slate-50 focus:bg-white text-sm leading-relaxed"
-      ></textarea>
-
-      <div class="flex flex-wrap justify-between gap-2 mt-2">
-        <p class="text-xs text-slate-500">
-          ระบบจะสรุปจากข้อความที่วางเท่านั้น
-        </p>
-        <p id="charCount" class="text-xs text-slate-400 whitespace-nowrap">
-          0 ตัวอักษร
+        <p class="text-sm md:text-base text-slate-500 mt-2">
+          สรุปเนื้อหาข่าวให้กระชับ พร้อมแยกประเด็นสำคัญอัตโนมัติ
         </p>
       </div>
-    </div>
 
-    <button
-      id="summarizeBtn"
-      onclick="generateSummary()"
-      class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-3.5 px-4 rounded-xl transition duration-200 flex justify-center items-center shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
-    >
-      <span id="btnText" class="text-base tracking-wide">✨ เริ่มสรุปข่าว</span>
-
-      <svg
-        id="loadingSpinner"
-        class="animate-spin ml-3 h-5 w-5 text-white hidden"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle class="opacity-25" cx="12" cy="12" r="10"
-                stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-    </button>
-
-    <div id="dailyLimitBox" class="hidden mt-4 text-center">
-      <span id="dailyLimitText"
-            class="inline-block text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full"></span>
-    </div>
-  </div>
-
-  <div id="usageBox"
-       class="hidden mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-
-    <div class="px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-      <div>
-        <p class="text-sm font-semibold text-slate-800">📊 การใช้งาน AI ครั้งล่าสุด</p>
-        <p id="usageProvider" class="text-xs text-slate-500 mt-0.5"></p>
-      </div>
-      <span id="usageBadge"
-            class="text-[11px] text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full"></span>
-    </div>
-
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-200">
-      <div class="bg-white p-4">
-        <p class="text-xs text-slate-500 mb-1">Input tokens</p>
-        <p id="usageInput" class="text-xl font-bold text-slate-900">—</p>
-      </div>
-
-      <div class="bg-white p-4">
-        <p class="text-xs text-slate-500 mb-1">Thinking tokens</p>
-        <p id="usageThinking" class="text-xl font-bold text-slate-900">—</p>
-      </div>
-
-      <div class="bg-white p-4">
-        <p class="text-xs text-slate-500 mb-1">Output tokens</p>
-        <p id="usageOutput" class="text-xl font-bold text-slate-900">—</p>
-      </div>
-
-      <div class="bg-white p-4">
-        <p class="text-xs text-slate-500 mb-1">Total tokens</p>
-        <p id="usageTotal" class="text-xl font-bold text-slate-900">—</p>
+      <div id="systemHealth"
+           class="inline-flex self-start md:self-auto items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-500 shadow-sm">
+        <span id="systemHealthDot" class="w-2 h-2 rounded-full bg-slate-300"></span>
+        <span id="systemHealthText">กำลังตรวจสอบระบบ...</span>
       </div>
     </div>
+  </header>
 
-    <div class="px-4 py-3 bg-slate-50 border-t border-slate-200">
-      <p id="usageNote" class="text-xs text-slate-500 leading-relaxed"></p>
-    </div>
-  </div>
+  <!-- Main Card -->
+  <main class="bg-white rounded-3xl border border-slate-200/80 glass-shadow overflow-hidden">
 
-  <div id="resultContainer"
-       class="mt-6 bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-100 hidden opacity-0 transition-opacity duration-500">
+    <div class="p-5 md:p-8">
 
-    <div class="bg-slate-900 px-5 md:px-6 py-4 flex flex-wrap gap-3 justify-between items-center">
-      <div>
-        <h2 class="text-lg font-medium text-white">📄 ผลการสรุป</h2>
-        <p id="usedModel" class="text-xs text-slate-400 mt-1"></p>
+      <!-- Error -->
+      <div id="errorBox"
+           class="hidden mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5 fade-up">
+        <div class="flex gap-3">
+          <div class="mt-0.5 w-7 h-7 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+            !
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-red-800">ไม่สามารถดำเนินการได้</p>
+            <p id="errorMessage" class="text-sm text-red-700 mt-0.5 whitespace-pre-wrap break-words"></p>
+          </div>
+        </div>
       </div>
 
-      <span class="text-xs text-slate-400 bg-slate-800 px-3 py-1.5 rounded-lg">
-        คัดลอกแยก 2 ส่วน
-      </span>
-    </div>
+      <!-- Input -->
+      <section>
+        <div class="flex flex-wrap items-end justify-between gap-2 mb-2.5">
+          <label for="newsContent" class="text-sm font-semibold text-slate-800">
+            เนื้อหาข่าวต้นฉบับ
+          </label>
 
-    <div class="p-6 md:p-8 space-y-5">
+          <p id="charCount"
+             class="text-xs text-slate-400 tabular-nums whitespace-nowrap">
+            0 / 30,000 ตัวอักษร
+          </p>
+        </div>
 
-      <section class="rounded-2xl border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
-          <h3 class="font-semibold text-slate-800">
-            ส่วนที่ 1: สรุปแบบความเรียง
-          </h3>
+        <div class="relative">
+          <textarea
+            id="newsContent"
+            rows="12"
+            placeholder="วางเนื้อหาข่าวที่ต้องการสรุป..."
+            class="w-full min-h-[300px] md:min-h-[340px] rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 md:px-5 md:py-5 text-sm md:text-[15px] leading-7 text-slate-800 placeholder:text-slate-400 outline-none resize-y transition focus:bg-white focus:border-blue-400 focus:ring-4 focus:ring-blue-50"
+          ></textarea>
 
-          <button type="button"
-                  onclick="copyPart('essay')"
-                  class="text-sm text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-lg shadow-sm">
-            <span id="copyEssayText">📋 คัดลอกส่วนนี้</span>
+          <button
+            id="clearBtn"
+            type="button"
+            onclick="clearNews()"
+            class="hidden absolute top-3 right-3 rounded-lg bg-white/95 border border-slate-200 px-2.5 py-1.5 text-xs text-slate-500 shadow-sm hover:text-slate-800 hover:border-slate-300 transition"
+          >
+            ล้างข้อความ
           </button>
         </div>
 
-        <div class="p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3">
+          <p class="text-xs text-slate-400">
+            ระบบใช้เฉพาะข้อมูลจากข้อความที่วางเพื่อสร้างผลสรุป
+          </p>
+
+          <div id="cacheHint" class="hidden text-xs text-emerald-600 font-medium">
+            รองรับการใช้ผลสรุปเดิมเมื่อพบข่าวซ้ำ
+          </div>
+        </div>
+      </section>
+
+      <!-- Action -->
+      <section class="mt-6">
+        <button
+          id="summarizeBtn"
+          onclick="generateSummary()"
+          class="w-full rounded-2xl bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-semibold py-4 px-5 transition flex justify-center items-center gap-3 shadow-lg shadow-slate-900/10 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <svg id="buttonIcon" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v18m9-9H3"/>
+          </svg>
+
+          <svg id="loadingSpinner"
+               class="animate-spin h-5 w-5 text-white hidden"
+               xmlns="http://www.w3.org/2000/svg"
+               fill="none"
+               viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10"
+                    stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+
+          <span id="btnText">เริ่มสรุปข่าว</span>
+        </button>
+
+        <!-- Processing Status -->
+        <div id="processingPanel"
+             class="hidden mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 overflow-hidden fade-up">
+
+          <div class="px-4 py-4 md:px-5 flex items-start gap-3">
+            <div class="mt-1 flex-shrink-0">
+              <span class="block w-2.5 h-2.5 rounded-full bg-blue-500 status-pulse"></span>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p id="processingTitle" class="text-sm font-semibold text-slate-800">
+                  กำลังเตรียมข้อมูล
+                </p>
+
+                <span id="elapsedTime"
+                      class="text-xs font-medium tabular-nums text-slate-500 bg-white/80 border border-blue-100 rounded-lg px-2 py-1">
+                  00:00
+                </span>
+              </div>
+
+              <p id="processingDetail" class="text-xs text-slate-500 mt-1.5">
+                ตรวจสอบข้อความก่อนส่งให้ระบบ AI
+              </p>
+
+              <div class="mt-3 h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                <div id="processingBar"
+                     class="h-full w-[12%] rounded-full bg-blue-500 transition-all duration-700 progress-shimmer"></div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 mt-3 text-[11px]">
+                <div id="stepPrepare"
+                     class="rounded-lg border border-blue-200 bg-white px-2 py-2 text-center font-medium text-blue-700">
+                  1. เตรียมข้อมูล
+                </div>
+                <div id="stepAI"
+                     class="rounded-lg border border-slate-200 bg-white/60 px-2 py-2 text-center text-slate-400">
+                  2. ประมวลผล AI
+                </div>
+                <div id="stepFormat"
+                     class="rounded-lg border border-slate-200 bg-white/60 px-2 py-2 text-center text-slate-400">
+                  3. จัดผลลัพธ์
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Result -->
+  <section id="resultContainer"
+           class="mt-6 bg-white rounded-3xl border border-slate-200/80 glass-shadow overflow-hidden hidden opacity-0 transition-opacity duration-300">
+
+    <div class="px-5 py-4 md:px-7 md:py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex w-8 h-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+            ✓
+          </span>
+          <div>
+            <h2 class="text-base md:text-lg font-semibold text-slate-900">
+              สรุปข่าวเรียบร้อย
+            </h2>
+            <p id="usedModel" class="text-xs text-slate-400 mt-0.5"></p>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultMeta"
+           class="text-xs text-slate-400 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2"></div>
+    </div>
+
+    <div class="p-5 md:p-7 space-y-5">
+
+      <!-- Essay -->
+      <article class="rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-3.5 md:px-5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-blue-600 mb-0.5">ส่วนที่ 1</p>
+            <h3 class="font-semibold text-slate-800">สรุปแบบความเรียง</h3>
+          </div>
+
+          <button
+            type="button"
+            onclick="copyPart('essay')"
+            class="text-xs md:text-sm text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-2 rounded-xl shadow-sm transition"
+          >
+            <span id="copyEssayText">คัดลอก</span>
+          </button>
+        </div>
+
+        <div class="p-5 md:p-6">
           <div id="essayResult"
-               class="ai-result text-slate-700 leading-loose text-base"></div>
+               class="ai-result text-slate-700 leading-8 text-[15px]"></div>
         </div>
-      </section>
+      </article>
 
-      <section class="rounded-2xl border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
-          <h3 class="font-semibold text-slate-800">
-            ส่วนที่ 2: สรุปประเด็นสำคัญ
-          </h3>
+      <!-- Points -->
+      <article class="rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-3.5 md:px-5 bg-slate-50/80 border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-blue-600 mb-0.5">ส่วนที่ 2</p>
+            <h3 class="font-semibold text-slate-800">สรุปประเด็นสำคัญ</h3>
+          </div>
 
-          <button type="button"
-                  onclick="copyPart('points')"
-                  class="text-sm text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-lg shadow-sm">
-            <span id="copyPointsText">📋 คัดลอกส่วนนี้</span>
+          <button
+            type="button"
+            onclick="copyPart('points')"
+            class="text-xs md:text-sm text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-2 rounded-xl shadow-sm transition"
+          >
+            <span id="copyPointsText">คัดลอก</span>
           </button>
         </div>
 
-        <div class="p-5">
+        <div class="p-5 md:p-6">
           <div id="pointsResult"
-               class="ai-result text-slate-700 leading-loose text-base"></div>
+               class="ai-result text-slate-700 leading-8 text-[15px]"></div>
+        </div>
+      </article>
+
+      <!-- Headlines -->
+      <section id="headlineSection" class="rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-3.5 md:px-5 bg-slate-50/80 border-b border-slate-200">
+          <p class="text-xs font-medium text-blue-600 mb-0.5">เพิ่มเติม</p>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="font-semibold text-slate-800">พาดหัวข่าวสั้น 3 แบบ</h3>
+            <span class="text-[11px] text-slate-400">แบบละ 3 บรรทัด</span>
+          </div>
+        </div>
+
+        <div class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <span class="text-sm font-semibold text-slate-700">แบบที่ 1</span>
+              <button type="button"
+                      onclick="copyHeadline(0)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyHeadlineText0">คัดลอก</span>
+              </button>
+            </div>
+            <div id="headlineResult0"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <span class="text-sm font-semibold text-slate-700">แบบที่ 2</span>
+              <button type="button"
+                      onclick="copyHeadline(1)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyHeadlineText1">คัดลอก</span>
+              </button>
+            </div>
+            <div id="headlineResult1"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+              <span class="text-sm font-semibold text-slate-700">แบบที่ 3</span>
+              <button type="button"
+                      onclick="copyHeadline(2)"
+                      class="text-xs text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition">
+                <span id="copyHeadlineText2">คัดลอก</span>
+              </button>
+            </div>
+            <div id="headlineResult2"
+                 class="p-4 text-[15px] font-semibold leading-8 text-slate-800 min-h-[120px] whitespace-pre-line"></div>
+          </article>
         </div>
       </section>
 
+      <!-- Compact technical details -->
+      <details id="detailsPanel"
+               class="rounded-2xl border border-slate-200 bg-slate-50/60">
+        <summary class="cursor-pointer select-none px-4 py-3 text-xs font-medium text-slate-500 hover:text-slate-700">
+          รายละเอียดการประมวลผล
+        </summary>
+
+        <div class="border-t border-slate-200 px-4 py-4">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="rounded-xl bg-white border border-slate-200 px-3 py-3">
+              <p class="text-[11px] text-slate-400">Input</p>
+              <p id="usageInput" class="font-semibold text-slate-800 mt-1">—</p>
+            </div>
+            <div class="rounded-xl bg-white border border-slate-200 px-3 py-3">
+              <p class="text-[11px] text-slate-400">Thinking</p>
+              <p id="usageThinking" class="font-semibold text-slate-800 mt-1">—</p>
+            </div>
+            <div class="rounded-xl bg-white border border-slate-200 px-3 py-3">
+              <p class="text-[11px] text-slate-400">Output</p>
+              <p id="usageOutput" class="font-semibold text-slate-800 mt-1">—</p>
+            </div>
+            <div class="rounded-xl bg-white border border-slate-200 px-3 py-3">
+              <p class="text-[11px] text-slate-400">Total</p>
+              <p id="usageTotal" class="font-semibold text-slate-800 mt-1">—</p>
+            </div>
+          </div>
+
+          <p id="usageNote" class="text-[11px] text-slate-400 mt-3"></p>
+        </div>
+      </details>
+
     </div>
-  </div>
+  </section>
+
+  <footer class="text-center mt-6 pb-4">
+    <p class="text-[11px] text-slate-400">
+      ระบบสรุปข่าวอัตโนมัติ • โปรดตรวจทานข้อมูลสำคัญก่อนเผยแพร่
+    </p>
+  </footer>
+
 </div>
 
 <script>
   let lastEssayText = "";
   let lastPointsText = "";
+  let lastHeadlineTexts = ["", "", ""];
   let maxInputChars = 30000;
 
+  let processingTimer = null;
+  let processingStartedAt = 0;
+  let processingStageTimer = null;
+
   const newsContentEl = document.getElementById("newsContent");
-  newsContentEl.addEventListener("input", updateCharacterCount);
+
+  newsContentEl.addEventListener("input", () => {
+    updateCharacterCount();
+    updateClearButton();
+  });
 
   function getClientId() {
     const key = "newsSummaryClientId";
     let id = localStorage.getItem(key);
 
     if (!id) {
-      id = (crypto.randomUUID
+      id = crypto.randomUUID
         ? crypto.randomUUID()
-        : "client-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+        : "client-" + Date.now() + "-" + Math.random().toString(36).slice(2);
+
       localStorage.setItem(key, id);
     }
 
@@ -224,6 +471,22 @@
     el.classList.toggle("text-slate-400", count <= maxInputChars);
   }
 
+  function updateClearButton() {
+    document.getElementById("clearBtn")
+      .classList.toggle("hidden", !newsContentEl.value);
+  }
+
+  function clearNews() {
+    newsContentEl.value = "";
+    newsContentEl.focus();
+    updateCharacterCount();
+    updateClearButton();
+
+    document.getElementById("resultContainer").classList.add("hidden");
+    lastHeadlineTexts = ["", "", ""];
+    hideError();
+  }
+
   function showError(message) {
     const box = document.getElementById("errorBox");
     document.getElementById("errorMessage").innerText = message;
@@ -235,13 +498,157 @@
     document.getElementById("errorBox").classList.add("hidden");
   }
 
-  function showStatus(message) {
-    document.getElementById("statusMessage").innerText = message;
-    document.getElementById("statusBox").classList.remove("hidden");
+  function setHealth(state, text) {
+    const dot = document.getElementById("systemHealthDot");
+    const textEl = document.getElementById("systemHealthText");
+
+    dot.className = "w-2 h-2 rounded-full";
+
+    if (state === "ok") {
+      dot.classList.add("bg-emerald-500");
+    } else if (state === "busy") {
+      dot.classList.add("bg-blue-500", "status-pulse");
+    } else if (state === "error") {
+      dot.classList.add("bg-red-500");
+    } else {
+      dot.classList.add("bg-slate-300");
+    }
+
+    textEl.innerText = text;
   }
 
-  function hideStatus() {
-    document.getElementById("statusBox").classList.add("hidden");
+  function setStepState(id, state) {
+    const el = document.getElementById(id);
+
+    el.className =
+      "rounded-lg border px-2 py-2 text-center text-[11px] transition";
+
+    if (state === "active") {
+      el.classList.add(
+        "border-blue-200",
+        "bg-white",
+        "font-medium",
+        "text-blue-700"
+      );
+    } else if (state === "done") {
+      el.classList.add(
+        "border-emerald-200",
+        "bg-emerald-50",
+        "font-medium",
+        "text-emerald-700"
+      );
+    } else {
+      el.classList.add(
+        "border-slate-200",
+        "bg-white/60",
+        "text-slate-400"
+      );
+    }
+  }
+
+  function setProcessingStage(stage) {
+    const title = document.getElementById("processingTitle");
+    const detail = document.getElementById("processingDetail");
+    const bar = document.getElementById("processingBar");
+
+    if (stage === 1) {
+      title.innerText = "กำลังเตรียมข้อมูล";
+      detail.innerText = "ตรวจสอบและจัดรูปแบบข้อความก่อนส่งประมวลผล";
+      bar.style.width = "18%";
+
+      setStepState("stepPrepare", "active");
+      setStepState("stepAI", "idle");
+      setStepState("stepFormat", "idle");
+    }
+
+    if (stage === 2) {
+      title.innerText = "กำลังประมวลผลด้วย AI";
+      detail.innerText = "ระบบกำลังเลือกบริการที่พร้อมใช้งานและสร้างผลสรุป";
+      bar.style.width = "58%";
+
+      setStepState("stepPrepare", "done");
+      setStepState("stepAI", "active");
+      setStepState("stepFormat", "idle");
+    }
+
+    if (stage === 3) {
+      title.innerText = "AI กำลังสร้างคำตอบ";
+      detail.innerText = "อาจใช้เวลาสักครู่ โดยเฉพาะเมื่อระบบต้องสลับไปยัง AI สำรอง";
+      bar.style.width = "76%";
+
+      setStepState("stepPrepare", "done");
+      setStepState("stepAI", "active");
+      setStepState("stepFormat", "idle");
+    }
+
+    if (stage === 4) {
+      title.innerText = "กำลังจัดผลลัพธ์";
+      detail.innerText = "แยกสรุปแบบความเรียงและประเด็นสำคัญ";
+      bar.style.width = "94%";
+
+      setStepState("stepPrepare", "done");
+      setStepState("stepAI", "done");
+      setStepState("stepFormat", "active");
+    }
+  }
+
+  function startProcessingUI() {
+    const panel = document.getElementById("processingPanel");
+    panel.classList.remove("hidden");
+
+    processingStartedAt = Date.now();
+    setProcessingStage(1);
+    setHealth("busy", "กำลังประมวลผล");
+
+    updateElapsedTime();
+
+    processingTimer = setInterval(updateElapsedTime, 1000);
+
+    // Visual stages: no fake completion percentage, only indicate that work continues.
+    processingStageTimer = setTimeout(() => {
+      setProcessingStage(2);
+
+      processingStageTimer = setTimeout(() => {
+        setProcessingStage(3);
+      }, 4500);
+    }, 900);
+  }
+
+  function updateElapsedTime() {
+    const seconds = Math.max(
+      0,
+      Math.floor((Date.now() - processingStartedAt) / 1000)
+    );
+
+    const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const ss = String(seconds % 60).padStart(2, "0");
+
+    document.getElementById("elapsedTime").innerText = `${mm}:${ss}`;
+  }
+
+  function stopProcessingUI(success = true) {
+    if (processingTimer) {
+      clearInterval(processingTimer);
+      processingTimer = null;
+    }
+
+    if (processingStageTimer) {
+      clearTimeout(processingStageTimer);
+      processingStageTimer = null;
+    }
+
+    if (success) {
+      setProcessingStage(4);
+
+      setTimeout(() => {
+        document.getElementById("processingPanel").classList.add("hidden");
+      }, 450);
+
+      setHealth("ok", "ระบบพร้อมใช้งาน");
+    } else {
+      document.getElementById("processingPanel").classList.add("hidden");
+      setHealth("error", "เกิดข้อผิดพลาด");
+    }
   }
 
   function escapeHtml(text) {
@@ -255,9 +662,50 @@
 
   function formatAiText(text) {
     return escapeHtml(text)
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>')
       .replace(/^\s*[-*•]\s+/gm, "• ")
       .replace(/\n/g, "<br>");
+  }
+
+  function parseHeadlineOptions(text) {
+    const source = String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+
+    const results = [];
+
+    for (let i = 1; i <= 3; i++) {
+      const pattern = new RegExp(
+        "<<<HEADLINE_" + i + ">>>\\\\s*([\\\\s\\\\S]*?)\\\\s*<<<END_HEADLINE_" + i + ">>>",
+        "i"
+      );
+
+      const match = source.match(pattern);
+      let value = match ? match[1].trim() : "";
+
+      if (value) {
+        // Remove accidental bullets/labels while preserving 3-line copy format.
+        let lines = value
+          .split("\n")
+          .map(line =>
+            line
+              .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
+              .replace(/^\s*บรรทัด(?:ที่)?\s*\d+\s*[:：-]?\s*/i, "")
+              .trim()
+          )
+          .filter(Boolean);
+
+        if (lines.length > 3) {
+          lines = lines.slice(0, 3);
+        }
+
+        value = lines.join("\n");
+      }
+
+      results.push(value);
+    }
+
+    return results;
   }
 
   function splitSummaryParts(text) {
@@ -286,11 +734,14 @@
       points = source
         .slice(pointsMatch.index + pointsMatch[0].length)
         .trim();
+
     } else if (pointsMatch) {
       essay = source.slice(0, pointsMatch.index).trim();
+
       points = source
         .slice(pointsMatch.index + pointsMatch[0].length)
         .trim();
+
     } else {
       const bulletMatch = source.match(/(?:^|\n)\s*[-*•]\s+/);
 
@@ -307,49 +758,36 @@
   }
 
   function formatToken(value) {
-    if (value === null || value === undefined || value === "") return "—";
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
 
     const n = Number(value);
-    return Number.isFinite(n) ? n.toLocaleString("th-TH") : String(value);
+
+    return Number.isFinite(n)
+      ? n.toLocaleString("th-TH")
+      : String(value);
   }
 
   function renderUsage(data) {
     const usage = data.usage || {};
 
-    document.getElementById("usageProvider").innerText =
-      `${data.provider} • ${data.model}`;
+    document.getElementById("usageInput").innerText =
+      formatToken(usage.input);
 
-    document.getElementById("usageInput").innerText = formatToken(usage.input);
-    document.getElementById("usageThinking").innerText = formatToken(usage.thinking);
-    document.getElementById("usageOutput").innerText = formatToken(usage.output);
-    document.getElementById("usageTotal").innerText = formatToken(usage.total);
+    document.getElementById("usageThinking").innerText =
+      formatToken(usage.thinking);
 
-    document.getElementById("usageBadge").innerText =
-      data.cached ? "⚡ ใช้ผลจากแคช" : "เรียก AI จริง";
+    document.getElementById("usageOutput").innerText =
+      formatToken(usage.output);
+
+    document.getElementById("usageTotal").innerText =
+      formatToken(usage.total);
 
     document.getElementById("usageNote").innerText =
       data.cached
-        ? "ข่าวนี้ตรงกับข้อมูลที่เพิ่งสรุปไว้ ระบบใช้ผลลัพธ์จากแคช จึงไม่เรียก AI ซ้ำและช่วยประหยัดโควต้า"
-        : "Token เป็นค่าที่ API รายงานกลับมาจากการสรุปครั้งนี้ ไม่ใช่การประมาณโควต้าคงเหลือของทั้งบัญชี";
-
-    document.getElementById("usageBox").classList.remove("hidden");
-  }
-
-  function renderLimits(limits) {
-    const box = document.getElementById("dailyLimitBox");
-    const text = document.getElementById("dailyLimitText");
-
-    if (
-      limits &&
-      Number.isFinite(Number(limits.clientDailyLimit)) &&
-      Number.isFinite(Number(limits.clientDailyRemaining))
-    ) {
-      text.innerText =
-        `สิทธิ์ผ่านระบบวันนี้เหลือ ${Number(limits.clientDailyRemaining).toLocaleString("th-TH")} / ${Number(limits.clientDailyLimit).toLocaleString("th-TH")} ครั้ง`;
-      box.classList.remove("hidden");
-    } else {
-      box.classList.add("hidden");
-    }
+        ? "ผลลัพธ์นี้มาจากแคช จึงไม่มีการเรียก AI ซ้ำ"
+        : "Token เป็นค่าที่ API รายงานจากการประมวลผลครั้งนี้";
   }
 
   async function writeClipboard(text) {
@@ -362,6 +800,7 @@
     area.value = text;
     area.style.position = "fixed";
     area.style.opacity = "0";
+
     document.body.appendChild(area);
     area.focus();
     area.select();
@@ -369,9 +808,29 @@
     document.body.removeChild(area);
   }
 
+  async function copyHeadline(index) {
+    const text = lastHeadlineTexts[index] || "";
+    const label = document.getElementById("copyHeadlineText" + index);
+
+    if (!text) return;
+
+    try {
+      await writeClipboard(text);
+      label.innerText = "คัดลอกแล้ว ✓";
+
+      setTimeout(() => {
+        label.innerText = "คัดลอก";
+      }, 1500);
+
+    } catch {
+      showError("คัดลอกพาดหัวไม่สำเร็จ กรุณาเลือกข้อความแล้วคัดลอกด้วยตนเอง");
+    }
+  }
+
   async function copyPart(part) {
     const isEssay = part === "essay";
     const text = isEssay ? lastEssayText : lastPointsText;
+
     const label = document.getElementById(
       isEssay ? "copyEssayText" : "copyPointsText"
     );
@@ -380,11 +839,12 @@
 
     try {
       await writeClipboard(text);
-      label.innerText = "✓ คัดลอกแล้ว";
+      label.innerText = "คัดลอกแล้ว ✓";
 
       setTimeout(() => {
-        label.innerText = "📋 คัดลอกส่วนนี้";
+        label.innerText = "คัดลอก";
       }, 1500);
+
     } catch {
       showError("คัดลอกไม่สำเร็จ กรุณาเลือกข้อความแล้วคัดลอกด้วยตนเอง");
     }
@@ -392,39 +852,50 @@
 
   async function loadStatus() {
     try {
-      const response = await fetch("/api/status", { cache: "no-store" });
+      const response = await fetch("/api/status", {
+        cache: "no-store"
+      });
+
       const data = await response.json();
 
-      if (!response.ok || !data.ok) throw new Error();
+      if (!response.ok || !data.ok) {
+        throw new Error("status unavailable");
+      }
 
-      const names = [];
-      if (data.providers?.gemini) names.push("Gemini");
-      if (data.providers?.groq) names.push("Groq");
-      if (data.providers?.openrouter) names.push("OpenRouter");
+      const providerCount = [
+        data.providers?.gemini,
+        data.providers?.groq,
+        data.providers?.openrouter
+      ].filter(Boolean).length;
 
-      document.getElementById("providerStatus").innerText =
-        names.length
-          ? `AI พร้อมใช้งาน: ${names.join(" → ")}`
-          : "ผู้ดูแลระบบยังไม่ได้ตั้ง API Key";
+      if (providerCount > 0) {
+        setHealth("ok", "ระบบพร้อมใช้งาน");
+      } else {
+        setHealth("error", "AI ยังไม่พร้อมใช้งาน");
+      }
+
+      if (data.kvConnected) {
+        document.getElementById("cacheHint").classList.remove("hidden");
+      }
 
       if (Number.isFinite(Number(data.limits?.maxInputChars))) {
         maxInputChars = Number(data.limits.maxInputChars);
         updateCharacterCount();
       }
+
     } catch {
-      document.getElementById("providerStatus").innerText =
-        "ตรวจสอบสถานะ AI ไม่สำเร็จ";
+      setHealth("error", "ตรวจสอบระบบไม่สำเร็จ");
     }
   }
 
   async function generateSummary() {
     hideError();
-    hideStatus();
 
     const newsContent = newsContentEl.value.trim();
 
     if (!newsContent) {
       showError("กรุณาวางเนื้อหาข่าวที่ต้องการสรุป");
+      newsContentEl.focus();
       return;
     }
 
@@ -437,18 +908,20 @@
 
     const btn = document.getElementById("summarizeBtn");
     const btnText = document.getElementById("btnText");
+    const buttonIcon = document.getElementById("buttonIcon");
     const spinner = document.getElementById("loadingSpinner");
     const resultContainer = document.getElementById("resultContainer");
 
     btn.disabled = true;
-    btnText.innerText = "กำลังสรุปข่าว...";
+    btnText.innerText = "กำลังสรุปข่าว";
+    buttonIcon.classList.add("hidden");
     spinner.classList.remove("hidden");
 
     resultContainer.classList.add("hidden");
     resultContainer.classList.remove("opacity-100");
     resultContainer.classList.add("opacity-0");
 
-    showStatus("กำลังเลือก AI ที่พร้อมใช้งานและสรุปข่าว...");
+    startProcessingUI();
 
     try {
       const response = await fetch("/api/summarize", {
@@ -463,22 +936,29 @@
       });
 
       let data = {};
+
       try {
         data = await response.json();
       } catch {
-        throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (HTTP ${response.status})`);
+        throw new Error(
+          `เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (HTTP ${response.status})`
+        );
       }
-
-      renderLimits(data.limits);
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.message || `HTTP ${response.status}`);
+        throw new Error(
+          data.message || `HTTP ${response.status}`
+        );
       }
 
+      setProcessingStage(4);
+
+      const headlines = parseHeadlineOptions(data.text);
       const parts = splitSummaryParts(data.text);
 
       lastEssayText = parts.essay;
       lastPointsText = parts.points;
+      lastHeadlineTexts = headlines;
 
       document.getElementById("essayResult").innerHTML =
         formatAiText(parts.essay);
@@ -486,23 +966,30 @@
       document.getElementById("pointsResult").innerHTML =
         formatAiText(parts.points);
 
-      document.getElementById("usedModel").innerText =
-        `ใช้ ${data.provider} • ${data.model}` +
-        (data.cached ? " • จากแคช" : "");
+      for (let i = 0; i < 3; i++) {
+        const headlineEl = document.getElementById("headlineResult" + i);
+        headlineEl.textContent =
+          headlines[i] || "ไม่พบพาดหัวแบบนี้จากคำตอบของ AI";
+      }
+
+      const modelText =
+        `${data.provider} • ${data.model}` +
+        (data.cached ? " • Cache" : "");
+
+      document.getElementById("usedModel").innerText = modelText;
+
+      const totalSeconds = Math.max(
+        1,
+        Math.round((Date.now() - processingStartedAt) / 1000)
+      );
+
+      document.getElementById("resultMeta").innerText =
+        data.cached
+          ? `ใช้ผลสรุปเดิม • ${totalSeconds} วินาที`
+          : `ประมวลผล ${totalSeconds} วินาที`;
 
       renderUsage(data);
-
-      const fallbackCount = Array.isArray(data.attempts)
-        ? data.attempts.length
-        : 0;
-
-      showStatus(
-        data.cached
-          ? "สรุปสำเร็จจากแคช — ไม่เสียคำขอ AI เพิ่ม"
-          : fallbackCount > 0
-            ? `สรุปสำเร็จด้วย ${data.provider} หลังสลับตัวสำรอง ${fallbackCount} ครั้ง`
-            : `สรุปสำเร็จด้วย ${data.provider}`
-      );
+      stopProcessingUI(true);
 
       resultContainer.classList.remove("hidden");
 
@@ -511,19 +998,28 @@
         resultContainer.classList.add("opacity-100");
         resultContainer.scrollIntoView({
           behavior: "smooth",
-          block: "nearest",
+          block: "start",
         });
       });
+
     } catch (error) {
-      showError("สรุปข่าวไม่สำเร็จ: " + (error.message || "ไม่ทราบสาเหตุ"));
+      stopProcessingUI(false);
+
+      showError(
+        "สรุปข่าวไม่สำเร็จ: " +
+        (error.message || "ไม่ทราบสาเหตุ")
+      );
+
     } finally {
       btn.disabled = false;
-      btnText.innerText = "✨ เริ่มสรุปข่าว";
+      btnText.innerText = "เริ่มสรุปข่าว";
+      buttonIcon.classList.remove("hidden");
       spinner.classList.add("hidden");
     }
   }
 
   updateCharacterCount();
+  updateClearButton();
   loadStatus();
 </script>
 
