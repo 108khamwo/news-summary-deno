@@ -109,7 +109,7 @@
         </h1>
 
         <p class="text-sm md:text-base text-slate-500 mt-2">
-          สรุปเนื้อหาข่าวให้กระชับ พร้อมแยกประเด็นสำคัญอัตโนมัติ
+          สรุปข่าวจากข้อความ เสียง และวิดีโอ พร้อมเลือกผลลัพธ์ได้ตามงาน
         </p>
       </div>
 
@@ -139,6 +139,16 @@
           </div>
         </div>
       </div>
+
+      <!-- Source Mode -->
+      <div class="mb-6 inline-flex w-full sm:w-auto rounded-2xl bg-slate-100 p-1 border border-slate-200">
+        <button id="sourceTextTab" type="button" onclick="switchSourceMode('text')"
+                class="flex-1 sm:flex-none rounded-xl bg-white text-slate-900 shadow-sm px-4 py-2.5 text-sm font-medium transition">ข้อความข่าว</button>
+        <button id="sourceMediaTab" type="button" onclick="switchSourceMode('media')"
+                class="flex-1 sm:flex-none rounded-xl text-slate-500 px-4 py-2.5 text-sm font-medium transition">เสียง / วิดีโอ</button>
+      </div>
+
+      <div id="textModeSection">
 
       <!-- Input -->
       <section>
@@ -277,6 +287,76 @@
           </div>
         </div>
       </section>
+
+      </div>
+
+      <!-- Media mode -->
+      <section id="mediaModeSection" class="hidden">
+        <div class="mb-3">
+          <h2 class="text-sm font-semibold text-slate-800">ไฟล์เสียงหรือวิดีโอ</h2>
+          <p class="text-xs text-slate-400 mt-1">อัปโหลดตรงไป Gemini สูงสุด 2 GB • API Key ไม่ถูกส่งให้ผู้ใช้</p>
+        </div>
+
+        <div id="mediaDropZone" class="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-7 text-center transition hover:border-blue-300 hover:bg-blue-50/30">
+          <input id="mediaFileInput" type="file" class="hidden"
+                 accept=".mp3,.wav,.aiff,.aif,.aac,.ogg,.flac,.mp4,.mpeg,.mpg,.mov,.avi,.flv,.webm,.wmv,.3gp,audio/*,video/*">
+          <div id="mediaEmptyState">
+            <div class="mx-auto w-11 h-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 mb-3">↑</div>
+            <p class="text-sm font-medium text-slate-700">เลือกไฟล์เสียงหรือวิดีโอ</p>
+            <p class="text-xs text-slate-400 mt-1">ลากไฟล์มาวาง หรือกดเลือกไฟล์</p>
+            <button type="button" onclick="document.getElementById('mediaFileInput').click()"
+                    class="mt-4 rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-blue-300 hover:text-blue-700 transition">เลือกไฟล์</button>
+          </div>
+          <div id="mediaFileState" class="hidden text-left">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">▶</div>
+              <div class="min-w-0 flex-1">
+                <p id="mediaFileName" class="text-sm font-semibold text-slate-800 break-all"></p>
+                <p id="mediaFileMeta" class="text-xs text-slate-400 mt-1"></p>
+              </div>
+              <button type="button" onclick="removeMediaFile()"
+                      class="self-start sm:self-auto rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 hover:text-red-600 hover:border-red-200 transition">เปลี่ยนไฟล์</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="mediaUploadStatus" class="hidden mt-3 rounded-2xl border border-blue-100 bg-blue-50/50 px-4 py-3.5">
+          <div class="flex items-center justify-between gap-3">
+            <p id="mediaStatusText" class="text-xs font-medium text-slate-700">กำลังอัปโหลดไฟล์...</p>
+            <span id="mediaStatusPercent" class="text-xs tabular-nums text-slate-400">0%</span>
+          </div>
+          <div class="mt-2 h-1.5 rounded-full bg-blue-100 overflow-hidden"><div id="mediaUploadBar" class="h-full w-0 rounded-full bg-blue-500 transition-all duration-200"></div></div>
+        </div>
+
+        <div class="mt-6">
+          <p class="text-sm font-semibold text-slate-800 mb-3">ต้องการให้ระบบทำอะไร</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <button id="mediaModeTranscript" type="button" onclick="selectMediaMode('transcript')" class="text-left rounded-2xl border-2 border-slate-900 bg-slate-50 px-4 py-4 transition">
+              <p class="text-sm font-semibold text-slate-900">ถอดข้อความทั้งหมด</p><p class="text-xs text-slate-400 mt-1">ถอดคำพูดตั้งแต่ต้นจนจบ ไม่สรุป</p>
+            </button>
+            <button id="mediaModeArticle" type="button" onclick="selectMediaMode('article')" class="text-left rounded-2xl border border-slate-200 bg-white px-4 py-4 hover:border-slate-300 transition">
+              <p class="text-sm font-semibold text-slate-800">เขียนเป็นข่าว</p><p class="text-xs text-slate-400 mt-1">เรียบเรียงข้อมูลจากคลิปเป็นข่าว</p>
+            </button>
+            <button id="mediaModePoints" type="button" onclick="selectMediaMode('points')" class="text-left rounded-2xl border border-slate-200 bg-white px-4 py-4 hover:border-slate-300 transition">
+              <p class="text-sm font-semibold text-slate-800">สรุปประเด็น</p><p class="text-xs text-slate-400 mt-1">สรุปสาระสำคัญออกมาเป็นข้อ</p>
+            </button>
+          </div>
+        </div>
+
+        <button id="processMediaBtn" type="button" onclick="processMediaFile()" disabled
+                class="mt-6 w-full rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-semibold py-4 px-5 transition flex justify-center items-center gap-3 shadow-lg shadow-slate-900/10 disabled:opacity-40 disabled:cursor-not-allowed">
+          <svg id="mediaSpinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          <span id="mediaProcessBtnText">ประมวลผลไฟล์</span>
+        </button>
+
+        <div id="mediaAnalyzeStatus" class="hidden mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-4 fade-up">
+          <div class="flex items-start gap-3"><span class="mt-1 block w-2.5 h-2.5 rounded-full bg-blue-500 status-pulse flex-shrink-0"></span>
+            <div class="min-w-0 flex-1"><div class="flex items-center justify-between gap-3"><p id="mediaAnalyzeTitle" class="text-sm font-semibold text-slate-800">กำลังเตรียมไฟล์</p><span id="mediaElapsed" class="text-xs tabular-nums text-slate-400">00:00</span></div>
+              <p class="text-xs text-slate-500 mt-1.5">วิดีโออาจใช้เวลาเตรียมไฟล์ก่อนวิเคราะห์</p></div>
+          </div>
+        </div>
+      </section>
+
 
     </div>
   </main>
@@ -456,6 +536,28 @@
     </div>
   </section>
 
+
+  <!-- Media Result -->
+  <section id="mediaResultContainer" class="mt-6 bg-white rounded-3xl border border-slate-200/80 glass-shadow overflow-hidden hidden opacity-0 transition-opacity duration-300">
+    <div class="px-5 py-4 md:px-7 md:py-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2"><span class="inline-flex w-8 h-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">✓</span>
+        <div><h2 id="mediaResultTitle" class="text-base md:text-lg font-semibold text-slate-900">ผลลัพธ์จากไฟล์</h2><p id="mediaUsedModel" class="text-xs text-slate-400 mt-0.5"></p></div></div>
+      <button type="button" onclick="copyMediaResult()" class="text-xs md:text-sm text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-3 py-2 rounded-xl shadow-sm transition"><span id="copyMediaResultText">คัดลอก</span></button>
+    </div>
+    <div class="p-5 md:p-7">
+      <div id="mediaResultText" class="ai-result whitespace-pre-wrap text-slate-700 leading-8 text-[15px]"></div>
+      <div id="mediaTruncatedWarning" class="hidden mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">ผลลัพธ์ยาวถึงขีดจำกัดของโมเดล อาจมีข้อความช่วงท้ายไม่ครบ โดยเฉพาะโหมดถอดข้อความจากไฟล์ยาวมาก</div>
+      <details class="mt-5 rounded-2xl border border-slate-200 bg-slate-50/60"><summary class="cursor-pointer select-none px-4 py-3 text-xs font-medium text-slate-500">รายละเอียด Token</summary>
+        <div class="border-t border-slate-200 px-4 py-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="rounded-xl bg-white border border-slate-200 px-3 py-3"><p class="text-[11px] text-slate-400">Input</p><p id="mediaUsageInput" class="font-semibold text-slate-800 mt-1">—</p></div>
+          <div class="rounded-xl bg-white border border-slate-200 px-3 py-3"><p class="text-[11px] text-slate-400">Thinking</p><p id="mediaUsageThinking" class="font-semibold text-slate-800 mt-1">—</p></div>
+          <div class="rounded-xl bg-white border border-slate-200 px-3 py-3"><p class="text-[11px] text-slate-400">Output</p><p id="mediaUsageOutput" class="font-semibold text-slate-800 mt-1">—</p></div>
+          <div class="rounded-xl bg-white border border-slate-200 px-3 py-3"><p class="text-[11px] text-slate-400">Total</p><p id="mediaUsageTotal" class="font-semibold text-slate-800 mt-1">—</p></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
   <footer class="text-center mt-6 pb-4">
     <p class="text-[11px] text-slate-400">
       ระบบสรุปข่าวอัตโนมัติ • โปรดตรวจทานข้อมูลสำคัญก่อนเผยแพร่
@@ -469,6 +571,14 @@
   let lastPointsText = "";
   let lastHeadlineTexts = ["", "", ""];
   let maxInputChars = 30000;
+  let maxMediaBytes = 2 * 1024 * 1024 * 1024;
+  let currentSourceMode = "text";
+  let selectedMediaMode = "transcript";
+  let localMediaFile = null;
+  let uploadedMediaFile = null;
+  let lastMediaResultText = "";
+  let mediaElapsedTimer = null;
+  let mediaStartedAt = 0;
 
   let processingTimer = null;
   let processingStartedAt = 0;
@@ -1156,6 +1266,216 @@
     }
   }
 
+
+  const MEDIA_MIME_BY_EXT = {
+    mp3: "audio/mp3", wav: "audio/wav", aiff: "audio/aiff", aif: "audio/aiff", aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac",
+    mp4: "video/mp4", mpeg: "video/mpeg", mpg: "video/mpeg", mov: "video/quicktime", avi: "video/avi", flv: "video/x-flv", webm: "video/webm", wmv: "video/wmv", "3gp": "video/3gpp"
+  };
+
+  function switchSourceMode(mode) {
+    currentSourceMode = mode === "media" ? "media" : "text";
+    const isMedia = currentSourceMode === "media";
+    document.getElementById("textModeSection").classList.toggle("hidden", isMedia);
+    document.getElementById("mediaModeSection").classList.toggle("hidden", !isMedia);
+    document.getElementById("resultContainer").classList.add("hidden");
+    document.getElementById("mediaResultContainer").classList.add("hidden");
+    const textTab = document.getElementById("sourceTextTab");
+    const mediaTab = document.getElementById("sourceMediaTab");
+    [textTab, mediaTab].forEach(el => el.className = "flex-1 sm:flex-none rounded-xl px-4 py-2.5 text-sm font-medium transition text-slate-500");
+    const active = isMedia ? mediaTab : textTab;
+    active.className = "flex-1 sm:flex-none rounded-xl bg-white text-slate-900 shadow-sm px-4 py-2.5 text-sm font-medium transition";
+    hideError();
+  }
+
+  function inferMediaMime(file) {
+    let mime = String(file?.type || "").toLowerCase().split(";")[0].trim();
+    if (mime === "audio/mpeg") mime = "audio/mp3";
+    if (mime === "audio/x-wav") mime = "audio/wav";
+    if (mime === "audio/x-aiff") mime = "audio/aiff";
+    if (mime === "video/mov") mime = "video/quicktime";
+    if (!Object.values(MEDIA_MIME_BY_EXT).includes(mime)) {
+      const ext = String(file?.name || "").toLowerCase().split(".").pop();
+      mime = MEDIA_MIME_BY_EXT[ext] || mime;
+    }
+    return mime;
+  }
+
+  function formatBytes(value) {
+    const n = Number(value || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 ** 2) return `${(n/1024).toFixed(1)} KB`;
+    if (n < 1024 ** 3) return `${(n/1024**2).toFixed(1)} MB`;
+    return `${(n/1024**3).toFixed(2)} GB`;
+  }
+
+  function selectMediaMode(mode) {
+    selectedMediaMode = ["transcript", "article", "points"].includes(mode) ? mode : "transcript";
+    const map = { transcript: "mediaModeTranscript", article: "mediaModeArticle", points: "mediaModePoints" };
+    Object.entries(map).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      el.className = "text-left rounded-2xl px-4 py-4 transition " + (key === selectedMediaMode ? "border-2 border-slate-900 bg-slate-50" : "border border-slate-200 bg-white hover:border-slate-300");
+    });
+  }
+
+  function updateMediaCard(file, note = "") {
+    document.getElementById("mediaEmptyState").classList.add("hidden");
+    document.getElementById("mediaFileState").classList.remove("hidden");
+    document.getElementById("mediaFileName").textContent = file.name;
+    const kind = inferMediaMime(file).startsWith("video/") ? "วิดีโอ" : "เสียง";
+    document.getElementById("mediaFileMeta").textContent = `${kind} • ${formatBytes(file.size)}${note ? " • " + note : ""}`;
+  }
+
+  async function createMediaUploadSession(file, mimeType) {
+    const response = await fetch("/api/media/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fileName: file.name, size: file.size, mimeType })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`);
+    return data;
+  }
+
+  function uploadDirectToGemini(uploadUrl, file, mimeType) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", uploadUrl, true);
+      xhr.setRequestHeader("Content-Type", mimeType);
+      xhr.setRequestHeader("X-Goog-Upload-Offset", "0");
+      xhr.setRequestHeader("X-Goog-Upload-Command", "upload, finalize");
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const value = Math.max(0, Math.min(100, Math.round(event.loaded / event.total * 100)));
+        document.getElementById("mediaStatusPercent").textContent = `${value}%`;
+        document.getElementById("mediaUploadBar").style.width = `${value}%`;
+      };
+      xhr.onload = () => {
+        let data = {}; try { data = JSON.parse(xhr.responseText || "{}"); } catch {}
+        if (xhr.status < 200 || xhr.status >= 300 || !data?.file?.name) {
+          reject(new Error(data?.error?.message || `Gemini upload HTTP ${xhr.status}`)); return;
+        }
+        resolve(data.file);
+      };
+      xhr.onerror = () => reject(new Error("อัปโหลดตรงไป Gemini ไม่สำเร็จ อาจเป็นปัญหาเครือข่ายหรือ CORS"));
+      xhr.send(file);
+    });
+  }
+
+  async function handleMediaSelection(file) {
+    hideError();
+    if (!file) return;
+    const mime = inferMediaMime(file);
+    if (!Object.values(MEDIA_MIME_BY_EXT).includes(mime)) { showError("ไฟล์นี้ยังไม่รองรับ"); return; }
+    if (file.size <= 0) { showError("ไฟล์ไม่มีข้อมูล"); return; }
+    if (file.size > maxMediaBytes) { showError(`ไฟล์ใหญ่เกิน ${formatBytes(maxMediaBytes)}`); return; }
+
+    if (uploadedMediaFile?.name) deleteUploadedMedia(uploadedMediaFile.name);
+    localMediaFile = file; uploadedMediaFile = null; lastMediaResultText = "";
+    document.getElementById("processMediaBtn").disabled = true;
+    document.getElementById("mediaResultContainer").classList.add("hidden");
+    updateMediaCard(file, "กำลังเตรียมอัปโหลด");
+
+    const status = document.getElementById("mediaUploadStatus");
+    status.classList.remove("hidden");
+    document.getElementById("mediaStatusText").textContent = "กำลังขอ Upload Session";
+    document.getElementById("mediaStatusPercent").textContent = "0%";
+    document.getElementById("mediaUploadBar").style.width = "0%";
+
+    try {
+      const session = await createMediaUploadSession(file, mime);
+      document.getElementById("mediaStatusText").textContent = "กำลังอัปโหลดตรงไป Gemini";
+      const geminiFile = await uploadDirectToGemini(session.uploadUrl, file, session.mimeType);
+      uploadedMediaFile = geminiFile;
+      document.getElementById("mediaStatusPercent").textContent = "100%";
+      document.getElementById("mediaUploadBar").style.width = "100%";
+      document.getElementById("mediaStatusText").textContent = "อัปโหลดเสร็จแล้ว";
+      updateMediaCard(file, "พร้อมประมวลผล");
+      document.getElementById("processMediaBtn").disabled = false;
+      setTimeout(() => status.classList.add("hidden"), 1600);
+    } catch (error) {
+      status.classList.add("hidden");
+      updateMediaCard(file, "อัปโหลดไม่สำเร็จ");
+      showError("อัปโหลดไฟล์ไม่สำเร็จ: " + (error.message || "ไม่ทราบสาเหตุ"));
+    }
+  }
+
+  async function deleteUploadedMedia(fileName) {
+    if (!fileName) return;
+    try { await fetch("/api/media/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fileName }) }); } catch {}
+  }
+
+  async function removeMediaFile() {
+    const old = uploadedMediaFile?.name;
+    localMediaFile = null; uploadedMediaFile = null; lastMediaResultText = "";
+    document.getElementById("mediaFileInput").value = "";
+    document.getElementById("mediaFileState").classList.add("hidden");
+    document.getElementById("mediaEmptyState").classList.remove("hidden");
+    document.getElementById("mediaUploadStatus").classList.add("hidden");
+    document.getElementById("mediaAnalyzeStatus").classList.add("hidden");
+    document.getElementById("mediaResultContainer").classList.add("hidden");
+    document.getElementById("processMediaBtn").disabled = true;
+    if (old) deleteUploadedMedia(old);
+  }
+
+  function startMediaTimer() {
+    mediaStartedAt = Date.now();
+    const update = () => {
+      const sec = Math.floor((Date.now() - mediaStartedAt)/1000);
+      document.getElementById("mediaElapsed").textContent = `${String(Math.floor(sec/60)).padStart(2,"0")}:${String(sec%60).padStart(2,"0")}`;
+    };
+    update(); if (mediaElapsedTimer) clearInterval(mediaElapsedTimer); mediaElapsedTimer = setInterval(update, 1000);
+  }
+  function stopMediaTimer() { if (mediaElapsedTimer) clearInterval(mediaElapsedTimer); mediaElapsedTimer = null; }
+
+  function showMediaUsage(usage = {}) {
+    const set = (id, v) => document.getElementById(id).textContent = Number.isFinite(Number(v)) ? Number(v).toLocaleString("th-TH") : "—";
+    set("mediaUsageInput", usage.input); set("mediaUsageThinking", usage.thinking); set("mediaUsageOutput", usage.output); set("mediaUsageTotal", usage.total);
+  }
+
+  async function processMediaFile() {
+    hideError();
+    if (!uploadedMediaFile?.name) { showError("กรุณาอัปโหลดไฟล์ให้เสร็จก่อน"); return; }
+    const btn = document.getElementById("processMediaBtn");
+    btn.disabled = true; document.getElementById("mediaSpinner").classList.remove("hidden"); document.getElementById("mediaProcessBtnText").textContent = "กำลังประมวลผล";
+    document.getElementById("mediaAnalyzeStatus").classList.remove("hidden");
+    document.getElementById("mediaAnalyzeTitle").textContent = selectedMediaMode === "transcript" ? "กำลังถอดข้อความทั้งหมด" : selectedMediaMode === "article" ? "กำลังเขียนเป็นข่าว" : "กำลังสรุปประเด็น";
+    document.getElementById("mediaResultContainer").classList.add("hidden");
+    startMediaTimer(); setHealth("busy", "กำลังวิเคราะห์ไฟล์");
+    try {
+      const response = await fetch("/api/media/process", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fileName: uploadedMediaFile.name, mode: selectedMediaMode, clientId: getClientId() }) });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`);
+      lastMediaResultText = String(data.text || "").trim();
+      const title = selectedMediaMode === "transcript" ? "ถอดข้อความทั้งหมด" : selectedMediaMode === "article" ? "เขียนเป็นข่าว" : "สรุปประเด็นสำคัญ";
+      document.getElementById("mediaResultTitle").textContent = title;
+      document.getElementById("mediaUsedModel").textContent = `${data.provider} • ${data.model}`;
+      document.getElementById("mediaResultText").textContent = lastMediaResultText;
+      document.getElementById("mediaTruncatedWarning").classList.toggle("hidden", !data.truncated);
+      showMediaUsage(data.usage || {});
+      const box = document.getElementById("mediaResultContainer"); box.classList.remove("hidden"); requestAnimationFrame(() => { box.classList.remove("opacity-0"); box.classList.add("opacity-100"); box.scrollIntoView({ behavior: "smooth", block: "start" }); });
+      setHealth("ok", "ระบบพร้อมใช้งาน");
+    } catch (error) {
+      showError("ประมวลผลไฟล์ไม่สำเร็จ: " + (error.message || "ไม่ทราบสาเหตุ")); setHealth("error", "เกิดข้อผิดพลาด");
+    } finally {
+      stopMediaTimer(); document.getElementById("mediaAnalyzeStatus").classList.add("hidden"); btn.disabled = !uploadedMediaFile?.name; document.getElementById("mediaSpinner").classList.add("hidden"); document.getElementById("mediaProcessBtnText").textContent = "ประมวลผลไฟล์";
+    }
+  }
+
+  async function copyMediaResult() {
+    if (!lastMediaResultText) return;
+    try { await writeClipboard(lastMediaResultText); const el = document.getElementById("copyMediaResultText"); el.textContent = "คัดลอกแล้ว ✓"; setTimeout(() => el.textContent = "คัดลอก", 1500); }
+    catch { showError("คัดลอกผลลัพธ์ไม่สำเร็จ"); }
+  }
+
+  function initMediaUi() {
+    const input = document.getElementById("mediaFileInput");
+    const zone = document.getElementById("mediaDropZone");
+    input.addEventListener("change", () => { const file = input.files?.[0]; if (file) handleMediaSelection(file); });
+    ["dragenter","dragover"].forEach(name => zone.addEventListener(name, event => { event.preventDefault(); zone.classList.add("border-blue-400","bg-blue-50"); }));
+    ["dragleave","drop"].forEach(name => zone.addEventListener(name, event => { event.preventDefault(); zone.classList.remove("border-blue-400","bg-blue-50"); }));
+    zone.addEventListener("drop", event => { const file = event.dataTransfer?.files?.[0]; if (file) handleMediaSelection(file); });
+  }
+
   function getClientId() {
     const key = "newsSummaryClientId";
     let id = localStorage.getItem(key);
@@ -1810,6 +2130,10 @@ ${indented}
         updateCharacterCount();
       }
 
+      if (Number.isFinite(Number(data.limits?.maxMediaBytes))) {
+        maxMediaBytes = Number(data.limits.maxMediaBytes);
+      }
+
     } catch {
       setHealth("error", "ตรวจสอบระบบไม่สำเร็จ");
     }
@@ -1969,6 +2293,8 @@ ${indented}
   updateClearButton();
   document.getElementById("copyCorrectedBtn")
     .classList.toggle("hidden", !newsContentEl.value.trim());
+  initMediaUi();
+  selectMediaMode("transcript");
   loadStatus();
 </script>
 

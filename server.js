@@ -12,6 +12,7 @@ const CLIENT_PER_DAY = envInt("CLIENT_PER_DAY", 10);
 const IP_PER_MINUTE = envInt("IP_PER_MINUTE", 15);
 const IP_PER_DAY = envInt("IP_PER_DAY", 100);
 const CACHE_TTL_MINUTES = envInt("CACHE_TTL_MINUTES", 360);
+const MAX_MEDIA_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB ตาม Files API Free-tier ceiling
 
 const GEMINI_MODELS = [
   { id: "gemini-3.5-flash", thinkingLevel: "LOW" },
@@ -906,6 +907,251 @@ async function summarizeWithFallback(promptText) {
   throw new Error(`AI ทุกตัวที่ตั้งค่าไว้ใช้งานไม่สำเร็จ: ${details}`);
 }
 
+
+// ---------------- Audio / Video ----------------
+const MEDIA_MODES = new Set(["transcript", "article", "points"]);
+const MEDIA_MIME_BY_EXT = {
+  mp3: "audio/mp3", wav: "audio/wav", aiff: "audio/aiff", aif: "audio/aiff",
+  aac: "audio/aac", ogg: "audio/ogg", flac: "audio/flac",
+  mp4: "video/mp4", mpeg: "video/mpeg", mpg: "video/mpeg", mov: "video/quicktime",
+  avi: "video/avi", flv: "video/x-flv", webm: "video/webm", wmv: "video/wmv", "3gp": "video/3gpp",
+};
+const SUPPORTED_MEDIA_MIMES = new Set(Object.values(MEDIA_MIME_BY_EXT));
+
+function safeMediaName(value) {
+  try { value = decodeURIComponent(String(value || "")); } catch { value = String(value || ""); }
+  return value.replace(/[\\/\u0000-\u001f\u007f]/g, "_").trim().slice(0, 180) || "media";
+}
+
+function normalizeMediaMime(raw, fileName = "") {
+  let mime = String(raw || "").toLowerCase().split(";")[0].trim();
+  if (mime === "audio/mpeg") mime = "audio/mp3";
+  if (mime === "audio/x-wav") mime = "audio/wav";
+  if (mime === "audio/x-aiff") mime = "audio/aiff";
+  if (mime === "video/mov") mime = "video/quicktime";
+  if (!SUPPORTED_MEDIA_MIMES.has(mime)) {
+    const ext = String(fileName || "").toLowerCase().split(".").pop();
+    if (MEDIA_MIME_BY_EXT[ext]) mime = MEDIA_MIME_BY_EXT[ext];
+  }
+  return mime;
+}
+
+function validateGeminiFileName(value) {
+  const name = String(value || "").trim();
+  return /^files\/[A-Za-z0-9._-]+$/.test(name) ? name : "";
+}
+
+async function handleMediaSession(req) {
+  if (!GEMINI_API_KEY) {
+    return json({ ok: false, message: "ระบบยังไม่ได้ตั้ง GEMINI_API_KEY" }, 503);
+  }
+
+  let body = {};
+  try { body = await req.json(); } catch {
+    return json({ ok: false, message: "ข้อมูลไฟล์ไม่ถูกต้อง" }, 400);
+  }
+
+  const fileName = safeMediaName(body.fileName);
+  const size = Number(body.size || 0);
+  const mimeType = normalizeMediaMime(body.mimeType, fileName);
+
+  if (!Number.isFinite(size) || size <= 0) {
+    return json({ ok: false, message: "ไม่สามารถอ่านขนาดไฟล์ได้" }, 400);
+  }
+  if (size > MAX_MEDIA_BYTES) {
+    return json({ ok: false, message: "ไฟล์ใหญ่เกิน 2 GB", maxMediaBytes: MAX_MEDIA_BYTES }, 413);
+  }
+  if (!SUPPORTED_MEDIA_MIMES.has(mimeType)) {
+    return json({ ok: false, message: "ชนิดไฟล์นี้ยังไม่รองรับ" }, 415);
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      "https://generativelanguage.googleapis.com/upload/v1beta/files",
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": GEMINI_API_KEY,
+          "x-goog-upload-protocol": "resumable",
+          "x-goog-upload-command": "start",
+          "x-goog-upload-header-content-length": String(size),
+          "x-goog-upload-header-content-type": mimeType,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ file: { display_name: fileName } }),
+      },
+      30000,
+    );
+
+    let errorData = {};
+    if (!response.ok) {
+      try { errorData = await response.json(); } catch {}
+      return json({
+        ok: false,
+        message: errorData?.error?.message || `เริ่มอัปโหลดไม่สำเร็จ (HTTP ${response.status})`,
+      }, 502);
+    }
+
+    const uploadUrl = response.headers.get("x-goog-upload-url");
+    if (!uploadUrl) {
+      return json({ ok: false, message: "Gemini ไม่ส่ง Upload URL กลับมา" }, 502);
+    }
+
+    return json({ ok: true, uploadUrl, mimeType, fileName, size });
+  } catch (error) {
+    return json({ ok: false, message: String(error?.message || "เริ่มอัปโหลดไม่สำเร็จ").slice(0, 1000) }, 502);
+  }
+}
+
+async function getGeminiFile(fileName) {
+  const valid = validateGeminiFileName(fileName);
+  if (!valid) throw new Error("รหัสไฟล์ไม่ถูกต้อง");
+  const response = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/${valid}`,
+    { headers: { "x-goog-api-key": GEMINI_API_KEY } },
+    30000,
+  );
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data?.error?.message || `อ่านสถานะไฟล์ไม่สำเร็จ (HTTP ${response.status})`);
+  return data;
+}
+
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function waitForGeminiFile(fileName, maxWaitMs = 300000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const file = await getGeminiFile(fileName);
+    const state = String(file?.state || "ACTIVE").toUpperCase();
+    if (state === "ACTIVE" || !file?.state) return file;
+    if (state === "FAILED") throw new Error("Gemini เตรียมไฟล์ไม่สำเร็จ กรุณาอัปโหลดใหม่");
+    await sleep(3000);
+  }
+  throw new Error("Gemini ยังเตรียมไฟล์ไม่เสร็จ กรุณารอสักครู่แล้วลองอีกครั้ง");
+}
+
+function mediaPrompt(mode, isVideo) {
+  const guard = `ใช้เฉพาะข้อมูลที่ได้ยิน${isVideo ? "หรือเห็นชัดเจน" : ""}จากไฟล์นี้เท่านั้น ห้ามค้นเว็บ ห้ามเติมข้อมูล ห้ามเดาชื่อ ตัวเลข วันที่ เวลา หรือสถานที่ ถ้าไม่ชัดให้ระบุว่า [ไม่ชัดเจน]`;
+  if (mode === "transcript") return `${guard}\n\nถอดคำพูดทั้งหมดตั้งแต่ต้นจนจบให้ครบที่สุด ห้ามสรุปหรือเรียบเรียงใหม่ รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงิน ถ้ามีหลายผู้พูดและแยกได้ให้ใช้ ผู้พูด 1:, ผู้พูด 2: โดยห้ามเดาชื่อ ถ้าฟังไม่ชัดให้ใส่ [ฟังไม่ชัด] จัดย่อหน้าให้อ่านง่าย${isVideo ? " เน้นเสียงพูด ไม่ต้องบรรยายภาพเว้นแต่ข้อความบนภาพจำเป็นต่อความเข้าใจ" : ""}`;
+  if (mode === "article") return `${guard}\n\nเขียนข้อมูลในไฟล์ใหม่เป็นข่าวภาษาไทยพร้อมตรวจแก้ก่อนเผยแพร่ เริ่มด้วยพาดหัวข่าว 1 บรรทัด แล้วเขียนเนื้อข่าวเป็นย่อหน้าแบบข่าวจริง จัดข้อมูลสำคัญก่อน เก็บสาระว่าเกิดอะไรขึ้น ใครเกี่ยวข้อง ที่ไหน เมื่อไร และผลกระทบเท่าที่ไฟล์ระบุ ห้ามสร้างคำพูดอ้างอิงที่ไม่มีจริง${isVideo ? " สามารถใช้ข้อเท็จจริงที่เห็นชัดจากภาพได้" : ""}`;
+  return `${guard}\n\nสรุปประเด็นสำคัญประมาณ 5-12 ข้อตามปริมาณเนื้อหา ใช้ • นำหน้าแต่ละข้อ แต่ละข้อกระชับแต่มีข้อมูลพอเข้าใจ รักษาชื่อเฉพาะ ตัวเลข วันที่ เวลา และจำนวนเงินให้ตรงกับไฟล์ ไม่ต้องมีบทนำหรือบทสรุปซ้ำ`;
+}
+
+async function callGeminiMedia(modelInfo, file, mode) {
+  const mimeType = normalizeMediaMime(file?.mimeType || file?.mime_type, file?.displayName || file?.display_name);
+  const isVideo = mimeType.startsWith("video/");
+  const isAudio = mimeType.startsWith("audio/");
+  if (!isVideo && !isAudio) throw makeProviderError("Gemini", 400, "ไฟล์นี้ไม่ใช่เสียงหรือวิดีโอที่รองรับ", modelInfo.id);
+
+  const generationConfig = {
+    maxOutputTokens: mode === "transcript" ? 65536 : mode === "article" ? 16000 : 10000,
+    thinkingConfig: { thinkingLevel: modelInfo.thinkingLevel },
+  };
+  if (isVideo) generationConfig.mediaResolution = "MEDIA_RESOLUTION_LOW";
+
+  const response = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelInfo.id)}:generateContent`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: "คุณคือผู้ช่วยกองบรรณาธิการภาษาไทย ทำงานจากไฟล์ต้นฉบับอย่างเคร่งครัดและไม่แต่งข้อมูล" }] },
+        contents: [{ role: "user", parts: [
+          { fileData: { mimeType, fileUri: file.uri } },
+          { text: mediaPrompt(mode, isVideo) },
+        ] }],
+        generationConfig,
+      }),
+    },
+    300000,
+  );
+
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) {
+    throw makeProviderError("Gemini", response.status, data?.error?.message || `Gemini HTTP ${response.status}`, modelInfo.id);
+  }
+
+  const text = (data?.candidates?.[0]?.content?.parts || [])
+    .map((part) => typeof part.text === "string" ? part.text : "")
+    .join("").trim();
+  if (!text) throw makeProviderError("Gemini", 502, "Gemini ตอบกลับมาแต่ไม่พบข้อความ", modelInfo.id);
+
+  const usage = data?.usageMetadata || {};
+  const finishReason = data?.candidates?.[0]?.finishReason || null;
+  return {
+    text,
+    provider: "Gemini",
+    model: modelInfo.id,
+    finishReason,
+    truncated: finishReason === "MAX_TOKENS",
+    usage: {
+      input: usage.promptTokenCount ?? null,
+      thinking: usage.thoughtsTokenCount ?? null,
+      output: usage.candidatesTokenCount ?? null,
+      total: usage.totalTokenCount ?? null,
+    },
+  };
+}
+
+async function mediaWithFallback(file, mode) {
+  const attempts = [];
+  for (const modelInfo of GEMINI_MODELS) {
+    try { return { ...(await callGeminiMedia(modelInfo, file, mode)), attempts }; }
+    catch (error) {
+      attempts.push({ provider: "Gemini", model: modelInfo.id, status: error?.status || null, message: String(error?.message || "unknown").slice(0, 300) });
+      console.warn("Media Gemini failed", modelInfo.id, error?.status || "", error?.message || error);
+    }
+  }
+  const last = attempts.at(-1);
+  throw new Error(last ? `Gemini สำหรับไฟล์สื่อไม่พร้อมใช้งาน: ${last.message}` : "ไม่พบ Gemini ที่พร้อมใช้งาน");
+}
+
+async function handleMediaProcess(req, info) {
+  if (!GEMINI_API_KEY) return json({ ok: false, message: "ระบบยังไม่ได้ตั้ง GEMINI_API_KEY" }, 503);
+  let body = {};
+  try { body = await req.json(); } catch { return json({ ok: false, message: "ข้อมูลไม่ถูกต้อง" }, 400); }
+  const fileName = validateGeminiFileName(body.fileName);
+  const mode = String(body.mode || "");
+  if (!fileName) return json({ ok: false, message: "ไม่พบไฟล์ที่อัปโหลดไว้" }, 400);
+  if (!MEDIA_MODES.has(mode)) return json({ ok: false, message: "รูปแบบการประมวลผลไม่ถูกต้อง" }, 400);
+
+  const clientId = cleanClientId(body.clientId);
+  const ip = getClientIp(req, info);
+  const rate = await consumeRateLimit(clientId, ip);
+  if (!rate.allowed) return json({ ok: false, message: "ระบบจำกัดคำขอชั่วคราว กรุณาลองใหม่ภายหลัง" }, 429);
+
+  try {
+    const file = await waitForGeminiFile(fileName);
+    const result = await mediaWithFallback(file, mode);
+    return json({ ok: true, mode, ...result, file: { name: file.name, displayName: file.displayName || file.display_name || "media", mimeType: file.mimeType || file.mime_type || "", state: file.state || "ACTIVE" } });
+  } catch (error) {
+    console.error("Media process failed", error);
+    return json({ ok: false, message: String(error?.message || "ประมวลผลไฟล์ไม่สำเร็จ").slice(0, 1200) }, 502);
+  }
+}
+
+async function handleMediaDelete(req) {
+  if (!GEMINI_API_KEY) return json({ ok: true });
+  let body = {}; try { body = await req.json(); } catch {}
+  const fileName = validateGeminiFileName(body.fileName);
+  if (!fileName) return json({ ok: true });
+  try {
+    const response = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/${fileName}`,
+      { method: "DELETE", headers: { "x-goog-api-key": GEMINI_API_KEY } },
+      30000,
+    );
+    if (!response.ok && response.status !== 404) throw new Error(`HTTP ${response.status}`);
+    return json({ ok: true });
+  } catch (error) {
+    console.warn("Media delete failed", error?.message || error);
+    return json({ ok: false, message: "ลบไฟล์ไม่สำเร็จ แต่ Files API จะหมดอายุไฟล์อัตโนมัติ" }, 502);
+  }
+}
+
+
 async function handleSummarize(req, info) {
   if (!GEMINI_API_KEY && !GROQ_API_KEY && !OPENROUTER_API_KEY) {
     return json({
@@ -1085,12 +1331,25 @@ Deno.serve(async (req, info) => {
         ipPerMinute: IP_PER_MINUTE,
         ipPerDay: IP_PER_DAY,
         cacheTtlMinutes: CACHE_TTL_MINUTES,
+        maxMediaBytes: MAX_MEDIA_BYTES,
       },
     });
   }
 
   if (req.method === "POST" && url.pathname === "/api/summarize") {
     return await handleSummarize(req, info);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/media/session") {
+    return await handleMediaSession(req);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/media/process") {
+    return await handleMediaProcess(req, info);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/media/delete") {
+    return await handleMediaDelete(req);
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
