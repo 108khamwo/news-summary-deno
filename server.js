@@ -76,6 +76,7 @@ try {
 
 const memoryCounters = new Map();
 const memoryCache = new Map();
+const memoryMediaUploadSessions = new Map();
 
 function nowBangkokDay() {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -941,28 +942,174 @@ function validateGeminiFileName(value) {
   return /^files\/[A-Za-z0-9._-]+$/.test(name) ? name : "";
 }
 
+const MEDIA_UPLOAD_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+const MEDIA_PROXY_TARGET_CHUNK_BYTES = 4 * 1024 * 1024;
+
+async function saveMediaUploadSession(sessionId, value) {
+  const stored = {
+    ...value,
+    updatedAt: Date.now(),
+  };
+
+  if (kv) {
+    await kv.set(
+      ["media-upload-session", sessionId],
+      stored,
+      { expireIn: MEDIA_UPLOAD_SESSION_TTL_MS },
+    );
+    return;
+  }
+
+  memoryMediaUploadSessions.set(sessionId, {
+    value: stored,
+    expiresAt: Date.now() + MEDIA_UPLOAD_SESSION_TTL_MS,
+  });
+
+  if (memoryMediaUploadSessions.size > 500) {
+    const now = Date.now();
+    for (const [key, entry] of memoryMediaUploadSessions) {
+      if (!entry || entry.expiresAt <= now) {
+        memoryMediaUploadSessions.delete(key);
+      }
+    }
+  }
+}
+
+async function getMediaUploadSession(sessionId) {
+  const id = String(sessionId || "").trim();
+
+  if (!/^[0-9a-f-]{30,50}$/i.test(id)) {
+    return null;
+  }
+
+  if (kv) {
+    const result = await kv.get(["media-upload-session", id]);
+    return result.value || null;
+  }
+
+  const entry = memoryMediaUploadSessions.get(id);
+
+  if (!entry) return null;
+
+  if (entry.expiresAt <= Date.now()) {
+    memoryMediaUploadSessions.delete(id);
+    return null;
+  }
+
+  return entry.value || null;
+}
+
+async function deleteMediaUploadSession(sessionId) {
+  const id = String(sessionId || "").trim();
+  if (!id) return;
+
+  if (kv) {
+    try {
+      await kv.delete(["media-upload-session", id]);
+    } catch {
+      // best effort
+    }
+    return;
+  }
+
+  memoryMediaUploadSessions.delete(id);
+}
+
+function normalizeChunkGranularity(value) {
+  const parsed = Number(value || 0);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 256 * 1024;
+  }
+
+  return Math.max(256 * 1024, Math.floor(parsed));
+}
+
+function chooseProxyChunkSize(granularity) {
+  const g = normalizeChunkGranularity(granularity);
+  const multiplier = Math.max(
+    1,
+    Math.ceil(MEDIA_PROXY_TARGET_CHUNK_BYTES / g),
+  );
+  return g * multiplier;
+}
+
+async function queryGeminiUpload(uploadUrl) {
+  try {
+    const response = await fetchWithTimeout(
+      uploadUrl,
+      {
+        method: "POST",
+        headers: {
+          "content-length": "0",
+          "x-goog-upload-command": "query",
+        },
+      },
+      30000,
+    );
+
+    return {
+      ok: response.ok,
+      status: String(
+        response.headers.get("x-goog-upload-status") || "",
+      ).toLowerCase(),
+      received: Number(
+        response.headers.get("x-goog-upload-size-received") || 0,
+      ),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: "",
+      received: 0,
+    };
+  }
+}
+
 async function handleMediaSession(req) {
   if (!GEMINI_API_KEY) {
-    return json({ ok: false, message: "ระบบยังไม่ได้ตั้ง GEMINI_API_KEY" }, 503);
+    return json({
+      ok: false,
+      message: "ระบบยังไม่ได้ตั้ง GEMINI_API_KEY",
+    }, 503);
   }
 
   let body = {};
-  try { body = await req.json(); } catch {
-    return json({ ok: false, message: "ข้อมูลไฟล์ไม่ถูกต้อง" }, 400);
+
+  try {
+    body = await req.json();
+  } catch {
+    return json({
+      ok: false,
+      message: "ข้อมูลไฟล์ไม่ถูกต้อง",
+    }, 400);
   }
 
   const fileName = safeMediaName(body.fileName);
   const size = Number(body.size || 0);
   const mimeType = normalizeMediaMime(body.mimeType, fileName);
+  const clientId = cleanClientId(body.clientId);
 
   if (!Number.isFinite(size) || size <= 0) {
-    return json({ ok: false, message: "ไม่สามารถอ่านขนาดไฟล์ได้" }, 400);
+    return json({
+      ok: false,
+      message: "ไม่สามารถอ่านขนาดไฟล์ได้",
+    }, 400);
   }
+
   if (size > MAX_MEDIA_BYTES) {
-    return json({ ok: false, message: "ไฟล์ใหญ่เกิน 2 GB", maxMediaBytes: MAX_MEDIA_BYTES }, 413);
+    return json({
+      ok: false,
+      message: "ไฟล์ใหญ่เกิน 2 GB",
+      maxMediaBytes: MAX_MEDIA_BYTES,
+    }, 413);
   }
+
   if (!SUPPORTED_MEDIA_MIMES.has(mimeType)) {
-    return json({ ok: false, message: "ชนิดไฟล์นี้ยังไม่รองรับ" }, 415);
+    return json({
+      ok: false,
+      message: "ชนิดไฟล์นี้ยังไม่รองรับ",
+    }, 415);
   }
 
   try {
@@ -978,28 +1125,277 @@ async function handleMediaSession(req) {
           "x-goog-upload-header-content-type": mimeType,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ file: { display_name: fileName } }),
+        body: JSON.stringify({
+          file: {
+            display_name: fileName,
+          },
+        }),
       },
       30000,
     );
 
     let errorData = {};
+
     if (!response.ok) {
-      try { errorData = await response.json(); } catch {}
+      try {
+        errorData = await response.json();
+      } catch {
+        // ignore
+      }
+
       return json({
         ok: false,
-        message: errorData?.error?.message || `เริ่มอัปโหลดไม่สำเร็จ (HTTP ${response.status})`,
+        message:
+          errorData?.error?.message ||
+          `เริ่มอัปโหลดไม่สำเร็จ (HTTP ${response.status})`,
       }, 502);
     }
 
     const uploadUrl = response.headers.get("x-goog-upload-url");
+
     if (!uploadUrl) {
-      return json({ ok: false, message: "Gemini ไม่ส่ง Upload URL กลับมา" }, 502);
+      return json({
+        ok: false,
+        message: "Gemini ไม่ส่ง Upload URL กลับมา",
+      }, 502);
     }
 
-    return json({ ok: true, uploadUrl, mimeType, fileName, size });
+    const granularity = normalizeChunkGranularity(
+      response.headers.get("x-goog-upload-chunk-granularity"),
+    );
+    const chunkSize = chooseProxyChunkSize(granularity);
+    const sessionId = crypto.randomUUID();
+
+    await saveMediaUploadSession(sessionId, {
+      uploadUrl,
+      mimeType,
+      fileName,
+      size,
+      clientId,
+      granularity,
+      chunkSize,
+    });
+
+    return json({
+      ok: true,
+      sessionId,
+      mimeType,
+      fileName,
+      size,
+      chunkSize,
+    });
   } catch (error) {
-    return json({ ok: false, message: String(error?.message || "เริ่มอัปโหลดไม่สำเร็จ").slice(0, 1000) }, 502);
+    return json({
+      ok: false,
+      message: String(
+        error?.message || "เริ่มอัปโหลดไม่สำเร็จ",
+      ).slice(0, 1000),
+    }, 502);
+  }
+}
+
+async function handleMediaChunk(req) {
+  const sessionId = String(
+    req.headers.get("x-media-session") || "",
+  ).trim();
+  const session = await getMediaUploadSession(sessionId);
+
+  if (!session) {
+    return json({
+      ok: false,
+      error: "UPLOAD_SESSION_EXPIRED",
+      message:
+        "Upload Session หมดอายุหรือไม่พบ กรุณาเลือกไฟล์ใหม่",
+    }, 410);
+  }
+
+  const clientId = cleanClientId(
+    req.headers.get("x-client-id"),
+  );
+
+  if (
+    session.clientId &&
+    session.clientId !== "anonymous" &&
+    session.clientId !== clientId
+  ) {
+    return json({
+      ok: false,
+      message: "Upload Session ไม่ตรงกับผู้ใช้นี้",
+    }, 403);
+  }
+
+  const offset = Number(
+    req.headers.get("x-media-offset") || -1,
+  );
+  const finalChunk =
+    req.headers.get("x-media-final") === "1";
+
+  if (
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset >= session.size
+  ) {
+    return json({
+      ok: false,
+      message: "ตำแหน่งอัปโหลดไฟล์ไม่ถูกต้อง",
+    }, 400);
+  }
+
+  let bytes;
+
+  try {
+    bytes = new Uint8Array(await req.arrayBuffer());
+  } catch {
+    return json({
+      ok: false,
+      message: "อ่านข้อมูลส่วนของไฟล์ไม่สำเร็จ",
+    }, 400);
+  }
+
+  if (!bytes.byteLength) {
+    return json({
+      ok: false,
+      message: "ส่วนของไฟล์ไม่มีข้อมูล",
+    }, 400);
+  }
+
+  if (bytes.byteLength > session.chunkSize) {
+    return json({
+      ok: false,
+      message: "ขนาดส่วนของไฟล์ใหญ่เกินที่ระบบกำหนด",
+    }, 413);
+  }
+
+  const expectedEnd = offset + bytes.byteLength;
+
+  if (expectedEnd > session.size) {
+    return json({
+      ok: false,
+      message: "ข้อมูลส่วนของไฟล์เกินขนาดไฟล์จริง",
+    }, 400);
+  }
+
+  const shouldFinalize =
+    finalChunk || expectedEnd === session.size;
+
+  if (
+    !shouldFinalize &&
+    bytes.byteLength % session.granularity !== 0
+  ) {
+    return json({
+      ok: false,
+      message:
+        "ขนาดส่วนของไฟล์ไม่ตรงกับ resumable upload granularity",
+    }, 400);
+  }
+
+  const command =
+    shouldFinalize
+      ? "upload, finalize"
+      : "upload";
+
+  try {
+    const response = await fetchWithTimeout(
+      session.uploadUrl,
+      {
+        method: "POST",
+        headers: {
+          "content-type": session.mimeType,
+          "content-length": String(bytes.byteLength),
+          "x-goog-upload-offset": String(offset),
+          "x-goog-upload-command": command,
+        },
+        body: bytes,
+      },
+      120000,
+    );
+
+    const responseText = await response.text();
+    let data = {};
+
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        // keep empty
+      }
+    }
+
+    if (!response.ok) {
+      const query = await queryGeminiUpload(session.uploadUrl);
+
+      return json({
+        ok: false,
+        error: "UPLOAD_CHUNK_FAILED",
+        message:
+          data?.error?.message ||
+          `Gemini รับส่วนของไฟล์ไม่สำเร็จ (HTTP ${response.status})`,
+        resumeOffset:
+          Number.isFinite(query.received)
+            ? query.received
+            : offset,
+        uploadStatus: query.status || null,
+      }, 409);
+    }
+
+    if (shouldFinalize) {
+      const file = data?.file || data;
+
+      if (!file?.name || !file?.uri) {
+        const query = await queryGeminiUpload(session.uploadUrl);
+
+        return json({
+          ok: false,
+          error: "FINALIZE_NO_FILE",
+          message:
+            "Gemini รับไฟล์ครบแล้วแต่ไม่ส่งข้อมูลไฟล์กลับมา กรุณาลองอัปโหลดใหม่",
+          resumeOffset:
+            Number.isFinite(query.received)
+              ? query.received
+              : expectedEnd,
+          uploadStatus: query.status || null,
+        }, 502);
+      }
+
+      await deleteMediaUploadSession(sessionId);
+
+      return json({
+        ok: true,
+        final: true,
+        nextOffset: expectedEnd,
+        file,
+      });
+    }
+
+    const receivedHeader = Number(
+      response.headers.get("x-goog-upload-size-received") ||
+      expectedEnd,
+    );
+
+    return json({
+      ok: true,
+      final: false,
+      nextOffset:
+        Number.isFinite(receivedHeader) &&
+        receivedHeader >= expectedEnd
+          ? receivedHeader
+          : expectedEnd,
+    });
+  } catch (error) {
+    const query = await queryGeminiUpload(session.uploadUrl);
+
+    return json({
+      ok: false,
+      error: "UPLOAD_PROXY_FAILED",
+      message:
+        "การส่งส่วนของไฟล์จาก Deno ไป Gemini สะดุด กรุณาลองต่อจากจุดเดิม",
+      detail: String(error?.message || "").slice(0, 300),
+      resumeOffset:
+        Number.isFinite(query.received)
+          ? query.received
+          : offset,
+      uploadStatus: query.status || null,
+    }, 502);
   }
 }
 
@@ -1342,6 +1738,10 @@ Deno.serve(async (req, info) => {
 
   if (req.method === "POST" && url.pathname === "/api/media/session") {
     return await handleMediaSession(req);
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/media/chunk") {
+    return await handleMediaChunk(req);
   }
 
   if (req.method === "POST" && url.pathname === "/api/media/process") {

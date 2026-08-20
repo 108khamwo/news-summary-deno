@@ -1329,36 +1329,131 @@
     const response = await fetch("/api/media/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ fileName: file.name, size: file.size, mimeType })
+      body: JSON.stringify({
+        fileName: file.name,
+        size: file.size,
+        mimeType,
+        clientId: getClientId()
+      })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.message || `HTTP ${response.status}`);
     return data;
   }
 
-  function uploadDirectToGemini(uploadUrl, file, mimeType) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", uploadUrl, true);
-      xhr.setRequestHeader("Content-Type", mimeType);
-      xhr.setRequestHeader("X-Goog-Upload-Offset", "0");
-      xhr.setRequestHeader("X-Goog-Upload-Command", "upload, finalize");
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        const value = Math.max(0, Math.min(100, Math.round(event.loaded / event.total * 100)));
-        document.getElementById("mediaStatusPercent").textContent = `${value}%`;
-        document.getElementById("mediaUploadBar").style.width = `${value}%`;
-      };
-      xhr.onload = () => {
-        let data = {}; try { data = JSON.parse(xhr.responseText || "{}"); } catch {}
-        if (xhr.status < 200 || xhr.status >= 300 || !data?.file?.name) {
-          reject(new Error(data?.error?.message || `Gemini upload HTTP ${xhr.status}`)); return;
-        }
-        resolve(data.file);
-      };
-      xhr.onerror = () => reject(new Error("อัปโหลดตรงไป Gemini ไม่สำเร็จ อาจเป็นปัญหาเครือข่ายหรือ CORS"));
-      xhr.send(file);
+  async function uploadChunkToServer(session, file, offset) {
+    const chunkSize = Math.max(
+      256 * 1024,
+      Number(session.chunkSize || 4 * 1024 * 1024)
+    );
+    const end = Math.min(file.size, offset + chunkSize);
+    const chunk = file.slice(offset, end);
+    const finalChunk = end >= file.size;
+
+    const response = await fetch("/api/media/chunk", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-media-session": session.sessionId,
+        "x-media-offset": String(offset),
+        "x-media-final": finalChunk ? "1" : "0",
+        "x-client-id": getClientId()
+      },
+      body: chunk
     });
+
+    let data = {};
+
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+
+    if (!response.ok || !data.ok) {
+      const error = new Error(
+        data.message || `อัปโหลดส่วนของไฟล์ไม่สำเร็จ (HTTP ${response.status})`
+      );
+
+      error.resumeOffset = Number.isFinite(Number(data.resumeOffset))
+        ? Number(data.resumeOffset)
+        : offset;
+
+      throw error;
+    }
+
+    return data;
+  }
+
+  async function uploadViaDenoChunks(session, file) {
+    let offset = 0;
+    let attemptsAtOffset = 0;
+
+    while (offset < file.size) {
+      try {
+        const data = await uploadChunkToServer(
+          session,
+          file,
+          offset
+        );
+
+        attemptsAtOffset = 0;
+        offset = Number(data.nextOffset || offset);
+
+        const percent = Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round((offset / file.size) * 100)
+          )
+        );
+
+        document.getElementById("mediaStatusPercent").textContent =
+          `${percent}%`;
+        document.getElementById("mediaUploadBar").style.width =
+          `${percent}%`;
+
+        if (data.final) {
+          if (!data?.file?.name) {
+            throw new Error(
+              "อัปโหลดครบแล้วแต่ไม่พบข้อมูลไฟล์จาก Gemini"
+            );
+          }
+
+          return data.file;
+        }
+      } catch (error) {
+        attemptsAtOffset += 1;
+
+        const resumeOffset = Number(error?.resumeOffset);
+
+        if (
+          Number.isFinite(resumeOffset) &&
+          resumeOffset >= 0 &&
+          resumeOffset <= file.size &&
+          resumeOffset !== offset
+        ) {
+          offset = resumeOffset;
+          attemptsAtOffset = 0;
+          continue;
+        }
+
+        if (attemptsAtOffset >= 3) {
+          throw error;
+        }
+
+        document.getElementById("mediaStatusText").textContent =
+          `การเชื่อมต่อสะดุด กำลังลองใหม่ (${attemptsAtOffset}/3)`;
+
+        await new Promise(resolve =>
+          setTimeout(resolve, 900 * attemptsAtOffset)
+        );
+      }
+    }
+
+    throw new Error(
+      "อัปโหลดไฟล์ไม่สมบูรณ์ กรุณาเลือกไฟล์ใหม่"
+    );
   }
 
   async function handleMediaSelection(file) {
@@ -1383,8 +1478,12 @@
 
     try {
       const session = await createMediaUploadSession(file, mime);
-      document.getElementById("mediaStatusText").textContent = "กำลังอัปโหลดตรงไป Gemini";
-      const geminiFile = await uploadDirectToGemini(session.uploadUrl, file, session.mimeType);
+      document.getElementById("mediaStatusText").textContent =
+        "กำลังอัปโหลดผ่าน Deno แบบแบ่งส่วน";
+      const geminiFile = await uploadViaDenoChunks(
+        session,
+        file
+      );
       uploadedMediaFile = geminiFile;
       document.getElementById("mediaStatusPercent").textContent = "100%";
       document.getElementById("mediaUploadBar").style.width = "100%";
