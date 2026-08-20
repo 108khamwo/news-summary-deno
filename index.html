@@ -334,10 +334,10 @@
       <!-- Headlines -->
       <section id="headlineSection" class="rounded-2xl border border-slate-200 overflow-hidden">
         <div class="px-4 py-3.5 md:px-5 bg-slate-50/80 border-b border-slate-200">
-          <p class="text-xs font-medium text-blue-600 mb-0.5">เพิ่มเติม</p>
+          
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="font-semibold text-slate-800">พาดหัวข่าวสั้น 3 แบบ</h3>
-            <span class="text-[11px] text-slate-400">สั้น กระชับ • แบบละ 3 บรรทัด</span>
+            <h3 class="font-semibold text-slate-800">พาดหัวข่าว 3 แบบ</h3>
+            
           </div>
         </div>
 
@@ -410,7 +410,7 @@
             </div>
           </div>
 
-          <p id="usageNote" class="text-[11px] text-slate-400 mt-3"></p>
+          <p id="usageNote" class="hidden"></p>
         </div>
       </details>
 
@@ -887,10 +887,7 @@
     document.getElementById("usageTotal").innerText =
       formatToken(usage.total);
 
-    document.getElementById("usageNote").innerText =
-      data.cached
-        ? "ผลลัพธ์นี้มาจากแคช จึงไม่มีการเรียก AI ซ้ำ"
-        : "Token เป็นค่าที่ API รายงานจากการประมวลผลครั้งนี้";
+    document.getElementById("usageNote").innerText = "";
   }
 
   async function writeClipboard(text) {
