@@ -171,14 +171,35 @@
           </button>
         </div>
 
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-3">
-          <p class="text-xs text-slate-400">
-            ระบบใช้เฉพาะข้อมูลจากข้อความที่วางเพื่อสร้างผลสรุป
-          </p>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+          <div class="flex flex-wrap gap-2">
+            <button id="spellCheckBtn" type="button" onclick="runThaiSpellCheck()"
+                    class="text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-700 px-3 py-2 rounded-xl transition shadow-sm">
+              ตรวจคำผิด
+            </button>
+
+            <button id="copyCorrectedBtn" type="button" onclick="copyCorrectedNews()"
+                    class="hidden text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 px-3 py-2 rounded-xl transition shadow-sm">
+              คัดลอกเนื้อหาที่แก้แล้ว
+            </button>
+          </div>
 
           <div id="cacheHint" class="hidden text-xs text-emerald-600 font-medium">
             รองรับการใช้ผลสรุปเดิมเมื่อพบข่าวซ้ำ
           </div>
+        </div>
+
+        <div id="spellCheckPanel"
+             class="hidden mt-4 rounded-2xl border border-amber-200 bg-amber-50/60 overflow-hidden fade-up">
+          <div class="px-4 py-3 border-b border-amber-100 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="text-sm font-semibold text-slate-800">ตรวจคำภาษาไทย</p>
+              <p id="spellCheckSummary" class="text-xs text-slate-500 mt-0.5"></p>
+            </div>
+            <button type="button" onclick="closeSpellCheck()"
+                    class="text-xs text-slate-400 hover:text-slate-700 px-2 py-1">ปิด</button>
+          </div>
+          <div id="spellCheckList" class="divide-y divide-amber-100"></div>
         </div>
       </section>
 
@@ -440,7 +461,323 @@
   newsContentEl.addEventListener("input", () => {
     updateCharacterCount();
     updateClearButton();
+
+    const hasText = Boolean(newsContentEl.value.trim());
+    document.getElementById("copyCorrectedBtn")
+      .classList.toggle("hidden", !hasText);
+
+    if (!hasText) {
+      document.getElementById("spellCheckPanel").classList.add("hidden");
+      currentSpellIssues = [];
+    }
   });
+
+  // ตรวจคำผิดภาษาไทยแบบ Local ใน Browser ไม่เรียก AI/API
+  const THAI_CORRECTIONS = {
+    "สถาณการณ์": "สถานการณ์",
+    "สถานะการณ์": "สถานการณ์",
+    "สถานะการ": "สถานการณ์",
+    "อนุญาติ": "อนุญาต",
+    "สังเกตุ": "สังเกต",
+    "เหตุการ": "เหตุการณ์",
+    "เหตการณ์": "เหตุการณ์",
+    "ปรากฎ": "ปรากฏ",
+    "ปรากฎการณ์": "ปรากฏการณ์",
+    "คำนวน": "คำนวณ",
+    "ประสพการณ์": "ประสบการณ์",
+    "ประสบการ": "ประสบการณ์",
+    "ประสพ": "ประสบ",
+    "ทะยอย": "ทยอย",
+    "ประสิทธภาพ": "ประสิทธิภาพ",
+    "ประสิทธิ์ภาพ": "ประสิทธิภาพ",
+    "ประสิทธิ์ผล": "ประสิทธิผล",
+    "ศูนย": "ศูนย์",
+    "ประชาสัมพันธ": "ประชาสัมพันธ์",
+    "เจ้าหน้าที": "เจ้าหน้าที่",
+    "ผู้โดยสาน": "ผู้โดยสาร",
+    "จราจรณ์": "จราจร",
+    "มาตราการ": "มาตรการ",
+    "มาตรการ์": "มาตรการ",
+    "หลักเกณท์": "หลักเกณฑ์",
+    "หลักเกนฑ์": "หลักเกณฑ์",
+    "หลักเกณฑ": "หลักเกณฑ์",
+    "เกณท์": "เกณฑ์",
+    "เกนฑ์": "เกณฑ์",
+    "กฏหมาย": "กฎหมาย",
+    "กฏ": "กฎ",
+    "ล่าชา": "ล่าช้า",
+    "แนะนํา": "แนะนำ",
+    "คำแนะนํา": "คำแนะนำ",
+    "อํานวย": "อำนวย",
+    "คํานวณ": "คำนวณ",
+    "สํานักงาน": "สำนักงาน",
+    "สําคัญ": "สำคัญ",
+    "สําหรับ": "สำหรับ",
+    "จําเป็น": "จำเป็น",
+    "ดําเนิน": "ดำเนิน",
+    "กําหนด": "กำหนด",
+    "กําลัง": "กำลัง",
+    "นํา": "นำ",
+    "นํ้า": "น้ำ",
+    "เปอร์เซนต์": "เปอร์เซ็นต์",
+    "เปอร์เซ็น": "เปอร์เซ็นต์",
+    "แอปพลิเคชั่น": "แอปพลิเคชัน",
+    "แอพพลิเคชั่น": "แอปพลิเคชัน",
+    "แอพพลิเคชัน": "แอปพลิเคชัน",
+    "อัพเดต": "อัปเดต",
+    "อัพเดท": "อัปเดต",
+    "อัปเดท": "อัปเดต",
+    "ดาวโหลด": "ดาวน์โหลด",
+    "อินเตอร์เน็ต": "อินเทอร์เน็ต",
+    "วีดีโอ": "วิดีโอ",
+    "วีดิโอ": "วิดีโอ",
+    "อีเมล์": "อีเมล",
+    "แสกน": "สแกน",
+    "เช็ค": "เช็ก",
+    "ลิ้งก์": "ลิงก์",
+    "ลิ้งค์": "ลิงก์",
+    "ลิงค์": "ลิงก์",
+    "โปรเจ็ค": "โปรเจกต์",
+    "โปรเจ็คต์": "โปรเจกต์",
+    "โปรเจค": "โปรเจกต์"
+  };
+
+  const ignoredSpellItems = new Set();
+  let currentSpellIssues = [];
+
+  function normalizeThaiForLookup(text) {
+    return String(text || "").normalize("NFC");
+  }
+
+  function findThaiSpellIssues(text) {
+    const source = normalizeThaiForLookup(text);
+    const issues = [];
+    const seen = new Set();
+
+    for (const [wrong, correct] of Object.entries(THAI_CORRECTIONS)) {
+      let start = 0;
+
+      while (true) {
+        const index = source.indexOf(wrong, start);
+        if (index < 0) break;
+
+        const ignoreKey = `${wrong}|${correct}`;
+        const uniqueKey = `${ignoreKey}|${index}`;
+
+        if (!ignoredSpellItems.has(ignoreKey) && !seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          issues.push({
+            wrong,
+            correct,
+            index,
+            length: wrong.length,
+            type: "dictionary"
+          });
+        }
+
+        start = index + wrong.length;
+      }
+    }
+
+    // จับตัวอักษรไทยซ้ำท้ายคำแบบง่าย เช่น "ข่าวว", "ระบบม"
+    const regex = /[\u0E00-\u0E7F]{4,}/g;
+    let match;
+
+    while ((match = regex.exec(source)) !== null) {
+      const token = match[0];
+      const chars = Array.from(token);
+
+      if (
+        chars.length >= 4 &&
+        chars[chars.length - 1] === chars[chars.length - 2]
+      ) {
+        const corrected = chars.slice(0, -1).join("");
+        const ignoreKey = `${token}|${corrected}`;
+        const uniqueKey = `${ignoreKey}|${match.index}`;
+
+        if (!ignoredSpellItems.has(ignoreKey) && !seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          issues.push({
+            wrong: token,
+            correct: corrected,
+            index: match.index,
+            length: token.length,
+            type: "repeat"
+          });
+        }
+      }
+    }
+
+    issues.sort((a, b) => a.index - b.index);
+    return issues;
+  }
+
+  function runThaiSpellCheck() {
+    hideError();
+
+    if (!newsContentEl.value.trim()) {
+      showError("กรุณาวางเนื้อหาข่าวก่อนตรวจคำผิด");
+      return;
+    }
+
+    currentSpellIssues = findThaiSpellIssues(newsContentEl.value);
+    renderSpellIssues();
+  }
+
+  function renderSpellIssues() {
+    const panel = document.getElementById("spellCheckPanel");
+    const list = document.getElementById("spellCheckList");
+    const summary = document.getElementById("spellCheckSummary");
+
+    list.innerHTML = "";
+
+    if (!currentSpellIssues.length) {
+      summary.innerText = "ไม่พบคำที่ระบบสงสัย";
+
+      const row = document.createElement("div");
+      row.className = "px-4 py-4 text-sm text-emerald-700 bg-emerald-50";
+      row.textContent = "ไม่พบคำผิดจากรายการตรวจสอบในเครื่อง";
+      list.appendChild(row);
+
+      panel.classList.remove("hidden");
+      return;
+    }
+
+    summary.innerText =
+      `พบ ${currentSpellIssues.length.toLocaleString("th-TH")} จุดที่ควรตรวจสอบ`;
+
+    currentSpellIssues.forEach((issue, idx) => {
+      const row = document.createElement("div");
+      row.className =
+        "px-4 py-3.5 bg-white/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3";
+
+      const info = document.createElement("div");
+      info.className = "min-w-0";
+
+      const words = document.createElement("div");
+      words.className = "flex flex-wrap items-center gap-2";
+
+      const wrong = document.createElement("span");
+      wrong.className =
+        "rounded-lg bg-red-50 border border-red-100 px-2 py-1 text-sm font-medium text-red-700";
+      wrong.textContent = issue.wrong;
+
+      const arrow = document.createElement("span");
+      arrow.className = "text-slate-300";
+      arrow.textContent = "→";
+
+      const correct = document.createElement("span");
+      correct.className =
+        "rounded-lg bg-emerald-50 border border-emerald-100 px-2 py-1 text-sm font-medium text-emerald-700";
+      correct.textContent = issue.correct;
+
+      words.appendChild(wrong);
+      words.appendChild(arrow);
+      words.appendChild(correct);
+
+      const hint = document.createElement("p");
+      hint.className = "text-[11px] text-slate-400 mt-1";
+      hint.textContent =
+        issue.type === "dictionary"
+          ? "คำที่อาจสะกดผิด"
+          : "พบตัวอักษรซ้ำท้ายคำ โปรดตรวจสอบ";
+
+      info.appendChild(words);
+      info.appendChild(hint);
+
+      const actions = document.createElement("div");
+      actions.className = "flex gap-2 flex-shrink-0";
+
+      const fixBtn = document.createElement("button");
+      fixBtn.type = "button";
+      fixBtn.className =
+        "text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 px-3 py-2 rounded-lg transition";
+      fixBtn.textContent = "แก้ไข";
+      fixBtn.onclick = () => applySpellFix(idx);
+
+      const ignoreBtn = document.createElement("button");
+      ignoreBtn.type = "button";
+      ignoreBtn.className =
+        "text-xs font-medium text-slate-500 bg-white border border-slate-200 hover:border-slate-300 px-3 py-2 rounded-lg transition";
+      ignoreBtn.textContent = "ข้าม";
+      ignoreBtn.onclick = () => ignoreSpellIssue(idx);
+
+      actions.appendChild(fixBtn);
+      actions.appendChild(ignoreBtn);
+
+      row.appendChild(info);
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+
+    panel.classList.remove("hidden");
+  }
+
+  function applySpellFix(issueIndex) {
+    const issue = currentSpellIssues[issueIndex];
+    if (!issue) return;
+
+    let text = newsContentEl.value;
+    let fixIndex = issue.index;
+
+    if (text.slice(fixIndex, fixIndex + issue.length) !== issue.wrong) {
+      fixIndex = text.indexOf(issue.wrong);
+    }
+
+    if (fixIndex < 0) {
+      runThaiSpellCheck();
+      return;
+    }
+
+    newsContentEl.value =
+      text.slice(0, fixIndex) +
+      issue.correct +
+      text.slice(fixIndex + issue.wrong.length);
+
+    document.getElementById("copyCorrectedBtn").classList.remove("hidden");
+
+    updateCharacterCount();
+    updateClearButton();
+
+    currentSpellIssues = findThaiSpellIssues(newsContentEl.value);
+    renderSpellIssues();
+  }
+
+  function ignoreSpellIssue(issueIndex) {
+    const issue = currentSpellIssues[issueIndex];
+    if (!issue) return;
+
+    ignoredSpellItems.add(`${issue.wrong}|${issue.correct}`);
+    currentSpellIssues = findThaiSpellIssues(newsContentEl.value);
+    renderSpellIssues();
+  }
+
+  function closeSpellCheck() {
+    document.getElementById("spellCheckPanel").classList.add("hidden");
+  }
+
+  async function copyCorrectedNews() {
+    const text = newsContentEl.value.trim();
+
+    if (!text) {
+      showError("ยังไม่มีเนื้อหาให้คัดลอก");
+      return;
+    }
+
+    const button = document.getElementById("copyCorrectedBtn");
+    const oldText = button.textContent;
+
+    try {
+      await writeClipboard(text);
+      button.textContent = "คัดลอกแล้ว ✓";
+
+      setTimeout(() => {
+        button.textContent = oldText;
+      }, 1500);
+    } catch {
+      showError("คัดลอกเนื้อหาที่แก้แล้วไม่สำเร็จ");
+    }
+  }
 
   function getClientId() {
     const key = "newsSummaryClientId";
@@ -483,6 +820,9 @@
     updateClearButton();
 
     document.getElementById("resultContainer").classList.add("hidden");
+    document.getElementById("spellCheckPanel").classList.add("hidden");
+    document.getElementById("copyCorrectedBtn").classList.add("hidden");
+    currentSpellIssues = [];
     lastHeadlineTexts = ["", "", ""];
     hideError();
   }
@@ -1135,6 +1475,8 @@
 
   updateCharacterCount();
   updateClearButton();
+  document.getElementById("copyCorrectedBtn")
+    .classList.toggle("hidden", !newsContentEl.value.trim());
   loadStatus();
 </script>
 
