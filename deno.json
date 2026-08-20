@@ -1,0 +1,8 @@
+{
+  "deploy": {
+    "runtime": {
+      "type": "dynamic",
+      "entrypoint": "./server.js"
+    }
+  }
+}
